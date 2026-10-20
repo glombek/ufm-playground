@@ -13,6 +13,7 @@ import {
 import type { PreviewMode } from '../components/ufm-preview.js';
 import '../components/ufm-preview.js';
 import '../editors/block-list-editor.js';
+import './embed-dialog.js';
 import { setUfmLanguageData } from '../editors/ufm-language/data.js';
 import { decodeState, encodeState, type PlaygroundState } from '../state.js';
 import { getCatalogue, getTerms, hasTerm, startUfm } from '../ufm/runtime.js';
@@ -71,7 +72,7 @@ export class UfmPlaygroundAppElement extends LitElement {
   private _markup = '';
   private _showDebug = false;
   private _debugTab: DebugTab = 'markup';
-  private _copied?: 'link' | 'embed';
+  private _copied = false;
 
   /** Values the user has edited, kept when an alias disappears from the template so retyping it restores them. */
   #remembered = new Map<string, Placeholder>();
@@ -296,18 +297,10 @@ export class UfmPlaygroundAppElement extends LitElement {
     this.#saveState();
   }
 
-  async #copy(what: 'link' | 'embed') {
-    await navigator.clipboard.writeText(what === 'link' ? location.href : this.#embedSnippet);
-    this._copied = what;
-    setTimeout(() => (this._copied = undefined), 2000);
-  }
-
-  get #embedSnippet() {
-    const state = this.#state();
-    const attr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-    const values = JSON.stringify(state.values).replace(/'/g, '&#39;');
-    const mode = this._mode === 'block' ? '' : ` mode="${this._mode}"`;
-    return `<ufm-preview template="${attr(this._template)}" values='${values}'${mode} show-template playground></ufm-preview>`;
+  async #copyLink() {
+    await navigator.clipboard.writeText(location.href);
+    this._copied = true;
+    setTimeout(() => (this._copied = false), 2000);
   }
 
   // ---- Rendering ----------------------------------------------------------------------------
@@ -321,11 +314,11 @@ export class UfmPlaygroundAppElement extends LitElement {
           <span class="version">Umbraco ${__UMBRACO_VERSION__}</span>
         </div>
         <div class="actions">
-          <uui-button look="primary" color="default" label="Copy link" .state=${this._copied === 'link' ? 'success' : undefined} @click=${() => this.#copy('link')}>
+          <uui-button look="primary" color="default" label="Copy link" .state=${this._copied ? 'success' : undefined} @click=${this.#copyLink}>
             <uui-icon name="icon-link"></uui-icon> Copy link
           </uui-button>
-          <uui-button look="outline" color="default" label="Copy embed code" .state=${this._copied === 'embed' ? 'success' : undefined} @click=${() => this.#copy('embed')}>
-            <uui-icon name="icon-code"></uui-icon> Copy embed code
+          <uui-button look="outline" color="default" label="Embed code" title="Show this on another page, like a blog post" @click=${() => this.renderRoot.querySelector('ufm-embed-dialog')?.open()}>
+            <uui-icon name="icon-code"></uui-icon> Embed code
           </uui-button>
           <!-- The backoffice's router (loaded with its editors) turns same-origin links into
                history.pushState unless they have a target, so this one needs one to navigate -->
@@ -359,6 +352,7 @@ export class UfmPlaygroundAppElement extends LitElement {
         </div>
         <div class="column">${this.#renderOutput()}</div>
       </main>
+      <ufm-embed-dialog .state=${this.#state()}></ufm-embed-dialog>
       <footer>
         Placeholder values stand in for your content: names for content, media and member pickers aren't looked up, they're just what you enter.
         Built by Joe Glombek, using the <a href="https://www.npmjs.com/package/@umbraco-cms/backoffice" target="_blank">@umbraco-cms/backoffice</a> package. Not affiliated with Umbraco HQ.

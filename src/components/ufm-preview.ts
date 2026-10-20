@@ -9,6 +9,7 @@
  * - `mode`: `block` (default), `collection` or `description`.
  * - `icon`: the block's icon, e.g. `icon-document`.
  * - `show-template`: also show the template.
+ * - `editable`: show the template, and let it be edited, re-rendering the preview as it changes.
  * - `playground`: add an "Open in playground" link.
  */
 import { css, html, LitElement, nothing } from '@umbraco-cms/backoffice/external/lit';
@@ -28,11 +29,16 @@ export class UfmPreviewElement extends LitElement {
     mode: { type: String },
     icon: { type: String },
     showTemplate: { type: Boolean, attribute: 'show-template' },
+    editable: { type: Boolean },
     playground: { type: Boolean },
     _items: { state: true },
+    _edited: { state: true },
   };
 
   template = '';
+  editable = false;
+  /** The template as edited (when `editable`), if it has been. */
+  private _edited?: string;
   /** Property values for one block, or an array of them for several. */
   values?: Values | Array<Values>;
   mode: PreviewMode = 'block';
@@ -49,11 +55,34 @@ export class UfmPreviewElement extends LitElement {
     startIcons();
   }
 
+  /** The template being previewed: as edited, or as given. */
+  get #template() {
+    return this._edited ?? this.template;
+  }
+
   override async willUpdate(changed: Map<string, unknown>) {
-    if (changed.has('template') || changed.has('values') || changed.has('mode')) {
+    if (changed.has('template')) this._edited = undefined;
+    if (changed.has('template') || changed.has('values') || changed.has('mode') || changed.has('_edited')) {
       await startUfm();
       this._items = await this.#buildItems();
     }
+  }
+
+  override updated(changed: Map<string, unknown>) {
+    // The editable template's text is set here, rather than rendered, so re-rendering while it's
+    // being edited doesn't move the cursor
+    const editor = this.shadowRoot?.querySelector<HTMLElement>('pre[contenteditable]');
+    if (editor && (changed.has('template') || changed.has('editable') || this._edited === undefined) && editor.textContent !== this.#template) {
+      editor.textContent = this.#template;
+    }
+  }
+
+  #onTemplateInput(e: Event) {
+    this._edited = (e.target as HTMLElement).textContent ?? '';
+  }
+
+  #reset() {
+    this._edited = undefined;
   }
 
   async #buildItems(): Promise<Array<Values>> {
@@ -61,7 +90,7 @@ export class UfmPreviewElement extends LitElement {
     if (this.exactValues) return given;
 
     // Fill in placeholders for anything the template uses that wasn't given
-    const analysis = analyse(this.template, await getCatalogue());
+    const analysis = analyse(this.#template, await getCatalogue());
     return given.map((values, index) => {
       const item: Values = { ...values };
       for (const [alias, usage] of analysis.properties) {
@@ -81,12 +110,30 @@ export class UfmPreviewElement extends LitElement {
 
   override render() {
     return html`
-      ${this.showTemplate ? html`<pre class="template"><code>${this.template}</code></pre>` : nothing}
+      ${this.editable ? this.#renderEditableTemplate() : this.showTemplate ? html`<pre class="template"><code>${this.template}</code></pre>` : nothing}
       ${this._items ? this.#renderPreview(this._items) : html`<div class="loading">Loading UFM…</div>`}
       ${this.playground
-        ? html`<a class="playground" href=${playgroundUrl({ template: this.template, values: this.values, mode: this.mode })} target="_blank">Open in the UFM playground ↗</a>`
+        ? html`<a class="playground" href=${playgroundUrl({ template: this.#template, values: this.values, mode: this.mode })} target="_blank">Open in the UFM playground ↗</a>`
         : nothing}
     `;
+  }
+
+  #renderEditableTemplate() {
+    const edited = this._edited !== undefined && this._edited !== this.template;
+    return html`<div class="editable">
+      <pre
+        class="template"
+        contenteditable="plaintext-only"
+        spellcheck="false"
+        role="textbox"
+        aria-multiline="true"
+        aria-label="UFM template (editable)"
+        title="Try editing the template"
+        @input=${this.#onTemplateInput}></pre>
+      <div class="editable-hint">
+        ${edited ? html`<button type="button" class="reset" @click=${this.#reset}>Reset</button>` : html`<span>✎ Try editing the template</span>`}
+      </div>
+    </div>`;
   }
 
   #renderPreview(items: Array<Values>) {
@@ -102,7 +149,7 @@ export class UfmPreviewElement extends LitElement {
                   <td>
                     <umb-ufm-render
                       inline
-                      .markdown=${this.template}
+                      .markdown=${this.#template}
                       .value=${item.$empty ? {} : { value: item.value }}
                       @umb-ufm-resolved=${(e: CustomEvent<{ text: string }>) => this.#resolved(i, e)}></umb-ufm-render>
                   </td>
@@ -116,7 +163,7 @@ export class UfmPreviewElement extends LitElement {
           <div class="property">
             <div class="property-label">
               <strong>Property</strong>
-              <umb-ufm-render .markdown=${this.template} .value=${{ alias: 'property', label: 'Property', description: this.template }}></umb-ufm-render>
+              <umb-ufm-render .markdown=${this.#template} .value=${{ alias: 'property', label: 'Property', description: this.#template }}></umb-ufm-render>
             </div>
             <div class="property-editor"></div>
           </div>
@@ -127,7 +174,7 @@ export class UfmPreviewElement extends LitElement {
             <umb-icon name=${this.icon}></umb-icon>
             <umb-ufm-render
               inline
-              .markdown=${this.template}
+              .markdown=${this.#template}
               .value=${item}
               @umb-ufm-resolved=${(e: CustomEvent<{ text: string }>) => this.#resolved(i, e)}></umb-ufm-render>
           </div>`,
@@ -156,6 +203,40 @@ export class UfmPreviewElement extends LitElement {
       font-size: 13px;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
+    }
+    .editable {
+      margin: 0 0 8px;
+    }
+    .editable .template {
+      margin: 0;
+      border: 1px solid var(--uui-color-border, #d8d7d9);
+      background: var(--uui-color-surface, #fff);
+      cursor: text;
+      outline: none;
+    }
+    .editable .template:hover {
+      border-color: var(--uui-color-border-emphasis, #a1a1a1);
+    }
+    .editable .template:focus {
+      border-color: var(--uui-color-focus, #3879ff);
+      box-shadow: 0 0 0 1px var(--uui-color-focus, #3879ff);
+    }
+    .editable-hint {
+      display: flex;
+      justify-content: flex-end;
+      min-height: 20px;
+      margin-top: 2px;
+      font-size: 12px;
+      color: var(--uui-color-text-alt, #68676b);
+    }
+    .reset {
+      font: inherit;
+      padding: 0 6px;
+      border: none;
+      background: none;
+      color: var(--uui-color-interactive, #1b264f);
+      text-decoration: underline;
+      cursor: pointer;
     }
     .block {
       display: flex;

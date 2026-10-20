@@ -37,10 +37,10 @@
     <pre><code>&lt;ufm-preview template="Call to Action: {umbContentName: page}" values='{"page": "Contact us"}'&gt;&lt;/ufm-preview&gt;</code></pre>
     <ufm-preview template="Call to Action: {umbContentName: page}" values='{"page": "Contact us"}'></ufm-preview>
 
-    <h2>Several blocks</h2>
+    <h2>Several blocks, with an editable template</h2>
     <p>Pass an array of values for several blocks. <code>null</code> means a property has never been set.</p>
-    <pre><code>&lt;ufm-preview template="${ heading || 'Untitled heading' }" values='[{"heading": "Contact us"}, {"heading": ""}, {"heading": null}]' show-template playground&gt;&lt;/ufm-preview&gt;</code></pre>
-    <ufm-preview template="${ heading || 'Untitled heading' }" values='[{"heading": "Contact us"}, {"heading": ""}, {"heading": null}]' show-template playground></ufm-preview>
+    <pre><code>&lt;ufm-preview template="${ heading || 'Untitled heading' }" values='[{"heading": "Contact us"}, {"heading": ""}, {"heading": null}]' editable playground&gt;&lt;/ufm-preview&gt;</code></pre>
+    <ufm-preview template="${ heading || 'Untitled heading' }" values='[{"heading": "Contact us"}, {"heading": ""}, {"heading": null}]' editable playground></ufm-preview>
 
     <h2>Placeholders</h2>
     <p>Leave out <code>values</code> (or some of them) and you'll get placeholder values, based on how the template uses each property.</p>
@@ -60,6 +60,7 @@
       <li><code>mode</code>: <code>block</code> (default), <code>collection</code> or <code>description</code>.</li>
       <li><code>icon</code>: the block's icon, e.g. <code>icon-article</code>.</li>
       <li><code>show-template</code>: show the template above the preview.</li>
+      <li><code>editable</code>: show the template, and let readers edit it, with the preview updating as they type.</li>
       <li><code>playground</code>: add an "Open in the UFM playground" link.</li>
     </ul>
 
