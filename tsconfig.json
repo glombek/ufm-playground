@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "types": ["vite/client"],
+    "paths": {
+      "@ufm-internal/*": ["./node_modules/@umbraco-cms/backoffice/dist-cms/packages/ufm/*"],
+      "@umb-assets/*": ["./node_modules/@umbraco-cms/backoffice/dist-cms/assets/*"],
+      "@umb-core/*": ["./node_modules/@umbraco-cms/backoffice/dist-cms/packages/core/*"],
+      "@umb-tiptap/*": ["./node_modules/@umbraco-cms/backoffice/dist-cms/packages/tiptap/*"],
+      "@umb-tags/*": ["./node_modules/@umbraco-cms/backoffice/dist-cms/packages/tags/*"],
+      "@uui-dist/*": ["./node_modules/@umbraco-ui/uui/dist/*"]
+    }
+  },
+  "include": ["src", "vite.config.ts", "vite.bookmarklet.config.ts"]
+}

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <title>Send to UFM Playground: bookmarklet</title>
+    <style>
+      body {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 24px 16px;
+        font-family: Lato, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        line-height: 1.6;
+        color: #1b264f;
+      }
+      h1 {
+        margin-top: 0;
+      }
+      .install {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 16px;
+        margin: 24px 0;
+        padding: 24px;
+        border: 2px dashed #c2c2c2;
+        border-radius: 6px;
+        background: #f3f3f5;
+      }
+      #bookmarklet {
+        display: inline-block;
+        padding: 10px 18px;
+        border-radius: 3px;
+        background: #3544b1;
+        color: #fff;
+        font-weight: bold;
+        text-decoration: none;
+        cursor: grab;
+      }
+      #bookmarklet[aria-disabled='true'] {
+        background: #c2c2c2;
+        pointer-events: none;
+      }
+      button {
+        font: inherit;
+        padding: 8px 14px;
+        border: 1px solid #c2c2c2;
+        border-radius: 3px;
+        background: #fff;
+        cursor: pointer;
+      }
+      code {
+        background: #f3f3f5;
+        padding: 1px 4px;
+        border-radius: 3px;
+      }
+      .note {
+        color: #515054;
+        font-size: 0.95em;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Send to UFM Playground</h1>
+    <p>
+      A bookmarklet that sends the block labels on a page in the Umbraco backoffice to the <a href="/">UFM Playground</a>: their real templates, and the
+      real values from each block, so you can try out changes to a label against real content.
+    </p>
+
+    <div class="install">
+      <a id="bookmarklet" href="#" aria-disabled="true">Send to UFM Playground</a>
+      <span>← Drag this to your bookmarks bar</span>
+      <button id="copy" type="button" hidden>Or copy the code</button>
+    </div>
+
+    <h2>Using it</h2>
+    <ol>
+      <li>In the Umbraco backoffice (version 14 or later), open a document with a block list or block grid.</li>
+      <li>Click the bookmarklet.</li>
+      <li>
+        If the page has more than one label template (e.g. several block types, or several block properties), choose one. The playground opens in a new tab with
+        that label's template and a block for each block using it.
+      </li>
+    </ol>
+
+    <h2>How it works</h2>
+    <p>
+      Every block label in the backoffice is rendered by an element which holds the label's template and the exact values Umbraco gives it, so the bookmarklet
+      reads those, rather than calling Umbraco's API. Picked content, media and members are swapped from their keys to the names Umbraco has already looked up.
+    </p>
+    <p class="note">
+      Nothing is sent anywhere: the values go to the playground in the URL's <code>#hash</code>, which browsers don't send to servers. But the link to the
+      playground contains your content, so think before sharing it!
+    </p>
+    <p class="note">
+      It reads parts of the backoffice which aren't a public API, so a future version of Umbraco could break it. It's tested against Umbraco
+      <span id="version"></span>.
+    </p>
+
+    <script type="module">
+      const link = document.getElementById('bookmarklet');
+      const copy = document.getElementById('copy');
+      document.getElementById('version').textContent = __UMBRACO_VERSION__;
+      // The playground is at the root of this site
+      const playground = `${location.origin}/`;
+      const script = await fetch("/bookmarklet.js").then((r) => r.text());
+      const code = script.replace(/__PLAYGROUND_URL__/g, playground);
+      link.href = `javascript:${encodeURIComponent(code)}`;
+      link.removeAttribute('aria-disabled');
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        alert('Drag this link to your bookmarks bar, then click it while you are in the Umbraco backoffice.');
+      });
+      copy.hidden = false;
+      copy.addEventListener('click', async () => {
+        await navigator.clipboard.writeText(`javascript:${encodeURIComponent(code)}`);
+        copy.textContent = 'Copied! Paste it as the URL of a new bookmark';
+      });
+    </script>
+  </body>
+</html>

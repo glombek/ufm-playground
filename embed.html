@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <title>Embedding UFM previews</title>
+    <style>
+      body {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 16px;
+        font-family: system-ui, sans-serif;
+        line-height: 1.5;
+      }
+      ufm-preview {
+        margin: 12px 0 24px;
+      }
+      pre {
+        background: #f3f3f5;
+        padding: 12px;
+        overflow-x: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Embedding UFM previews</h1>
+    <p>
+      Include the script once, then use <code>&lt;ufm-preview&gt;</code> wherever you want a live preview of a UFM template, rendered by Umbraco's own
+      UFM code. <a href="/">Back to the playground</a>.
+    </p>
+    <pre><code>&lt;script type="module" src="https://ufm-playground.joe.gl/embed.js"&gt;&lt;/script&gt;</code></pre>
+
+    <h2>A block label</h2>
+    <pre><code>&lt;ufm-preview template="Call to Action: {umbContentName: page}" values='{"page": "Contact us"}'&gt;&lt;/ufm-preview&gt;</code></pre>
+    <ufm-preview template="Call to Action: {umbContentName: page}" values='{"page": "Contact us"}'></ufm-preview>
+
+    <h2>Several blocks</h2>
+    <p>Pass an array of values for several blocks. <code>null</code> means a property has never been set.</p>
+    <pre><code>&lt;ufm-preview template="${ heading || 'Untitled heading' }" values='[{"heading": "Contact us"}, {"heading": ""}, {"heading": null}]' show-template playground&gt;&lt;/ufm-preview&gt;</code></pre>
+    <ufm-preview template="${ heading || 'Untitled heading' }" values='[{"heading": "Contact us"}, {"heading": ""}, {"heading": null}]' show-template playground></ufm-preview>
+
+    <h2>Placeholders</h2>
+    <p>Leave out <code>values</code> (or some of them) and you'll get placeholder values, based on how the template uses each property.</p>
+    <pre><code>&lt;ufm-preview template="Text module: ${ truncate(stripHtml(bodyText), 35) } (${ $settings.flipped ? 'Flipped' : 'Not flipped' })" icon="icon-article"&gt;&lt;/ufm-preview&gt;</code></pre>
+    <ufm-preview template="Text module: ${ truncate(stripHtml(bodyText), 35) } (${ $settings.flipped ? 'Flipped' : 'Not flipped' })" icon="icon-article"></ufm-preview>
+
+    <h2>Collection columns and property descriptions</h2>
+    <pre><code>&lt;ufm-preview mode="collection" template="${ value ? '⭐ Featured' : '' }" values='[{"value": true}, {"value": false}]'&gt;&lt;/ufm-preview&gt;</code></pre>
+    <ufm-preview mode="collection" template="${ value ? '⭐ Featured' : '' }" values='[{"value": true}, {"value": false}]'></ufm-preview>
+    <pre><code>&lt;ufm-preview mode="description" template="Use **Markdown** and [links](https://docs.umbraco.com) in descriptions"&gt;&lt;/ufm-preview&gt;</code></pre>
+    <ufm-preview mode="description" template="Use **Markdown** and [links](https://docs.umbraco.com) in descriptions"></ufm-preview>
+
+    <h2>Attributes</h2>
+    <ul>
+      <li><code>template</code>: the UFM template.</li>
+      <li><code>values</code>: JSON property values (plus <code>$settings</code> and <code>$index</code>), or an array of them for several blocks. Rich text is <code>{"markup": "&lt;p&gt;…&lt;/p&gt;"}</code>; picked content is a name or array of names; links are <code>[{"name": "…", "url": "…"}]</code>.</li>
+      <li><code>mode</code>: <code>block</code> (default), <code>collection</code> or <code>description</code>.</li>
+      <li><code>icon</code>: the block's icon, e.g. <code>icon-article</code>.</li>
+      <li><code>show-template</code>: show the template above the preview.</li>
+      <li><code>playground</code>: add an "Open in the UFM playground" link.</li>
+    </ul>
+
+    <script type="module" src="/src/embed.ts"></script>
+  </body>
+</html>
