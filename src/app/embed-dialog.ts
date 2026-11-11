@@ -16,6 +16,22 @@ interface EmbedOptions {
 
 const DEFAULT_ICON = 'icon-document';
 
+// Written as entities so Markdown parsers that look inside HTML (as some blogs' do) leave them alone,
+// including the ":" in "://", which some turn into links. Browsers read them as the characters.
+const MARKDOWN_ENTITIES: Record<string, string> = {
+  '*': '&#42;',
+  _: '&#95;',
+  '[': '&#91;',
+  ']': '&#93;',
+  '`': '&#96;',
+  '~': '&#126;',
+  '<': '&lt;',
+  '>': '&gt;',
+};
+const markdownSafe = (s: string) => s.replace(/[*_[\]`~<>]/g, (c) => MARKDOWN_ENTITIES[c]).replace(/:\/\//g, '&#58;//');
+const attributeValue = (s: string, quote: '"' | "'") =>
+  markdownSafe(s.replace(/&/g, '&amp;').replace(quote === '"' ? /"/g : /'/g, quote === '"' ? '&quot;' : '&#39;'));
+
 export class UfmEmbedDialogElement extends LitElement {
   static override properties = {
     state: { attribute: false },
@@ -43,14 +59,12 @@ export class UfmEmbedDialogElement extends LitElement {
   get #code() {
     if (!this.state) return '';
     const { showTemplate, editable, playground, icon, script } = this._options;
-    const attribute = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-    const values = JSON.stringify(this.state.values ?? {}).replace(/'/g, '&#39;');
     const mode = this.state.mode ?? 'block';
     const attributes = [
-      `template="${attribute(this.state.template)}"`,
-      `values='${values}'`,
+      `template="${attributeValue(this.state.template, '"')}"`,
+      `values='${attributeValue(JSON.stringify(this.state.values ?? {}), "'")}'`,
       mode === 'block' ? '' : `mode="${mode}"`,
-      mode === 'block' && icon && icon !== DEFAULT_ICON ? `icon="${attribute(icon)}"` : '',
+      mode === 'block' && icon && icon !== DEFAULT_ICON ? `icon="${attributeValue(icon, '"')}"` : '',
       editable ? 'editable' : showTemplate ? 'show-template' : '',
       playground ? 'playground' : '',
     ].filter((a) => a);
