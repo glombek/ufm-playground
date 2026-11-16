@@ -13,6 +13,7 @@ interface EmbedOptions {
   playground: boolean;
   icon: string;
   script: boolean;
+  unused: boolean;
 }
 
 const DEFAULT_ICON = 'icon-document';
@@ -36,13 +37,21 @@ const attributeValue = (s: string, quote: '"' | "'") =>
 export class UfmEmbedDialogElement extends LitElement {
   static override properties = {
     state: { attribute: false },
+    stateWithUnused: { attribute: false },
     _options: { state: true },
     _copied: { state: true },
   };
 
+  /** What's in the playground, without values the template doesn't use. */
   state?: PlaygroundState;
+  /** What's in the playground, with values the template doesn't use, if there are any. */
+  stateWithUnused?: PlaygroundState;
 
-  private _options: EmbedOptions = { showTemplate: true, editable: true, playground: true, icon: DEFAULT_ICON, script: true };
+  private _options: EmbedOptions = { showTemplate: true, editable: true, playground: true, icon: DEFAULT_ICON, script: true, unused: false };
+
+  get #state() {
+    return (this._options.unused && this.stateWithUnused) || this.state;
+  }
   private _copied = false;
 
   open() {
@@ -59,12 +68,12 @@ export class UfmEmbedDialogElement extends LitElement {
   }
 
   get #code() {
-    if (!this.state) return '';
+    if (!this.#state) return '';
     const { showTemplate, editable, playground, icon, script } = this._options;
-    const mode = this.state.mode ?? 'block';
+    const mode = this.#state.mode ?? 'block';
     const attributes = [
-      `template="${attributeValue(this.state.template, '"')}"`,
-      `values='${attributeValue(JSON.stringify(this.state.values ?? {}), "'")}'`,
+      `template="${attributeValue(this.#state.template, '"')}"`,
+      `values='${attributeValue(JSON.stringify(this.#state.values ?? {}), "'")}'`,
       mode === 'block' ? '' : `mode="${mode}"`,
       mode === 'block' && icon && icon !== DEFAULT_ICON ? `icon="${attributeValue(icon, '"')}"` : '',
       editable ? 'editable' : showTemplate ? 'show-template' : '',
@@ -76,14 +85,14 @@ export class UfmEmbedDialogElement extends LitElement {
 
   async #copy() {
     await navigator.clipboard.writeText(this.#code);
-    const { showTemplate, editable, playground, script } = this._options;
-    track('Copy embed code', { showTemplate: showTemplate || editable, editable, playground, script });
+    const { showTemplate, editable, playground, script, unused } = this._options;
+    track('Copy embed code', { showTemplate: showTemplate || editable, editable, playground, script, unused: unused && !!this.stateWithUnused });
     this._copied = true;
     setTimeout(() => (this._copied = false), 2000);
   }
 
   override render() {
-    const { showTemplate, editable, playground, icon, script } = this._options;
+    const { showTemplate, editable, playground, icon, script, unused } = this._options;
     const mode = this.state?.mode ?? 'block';
     return html`<dialog @click=${(e: Event) => e.target === e.currentTarget && this.#close()}>
       <uui-dialog-layout headline="Embed code">
@@ -94,6 +103,12 @@ export class UfmEmbedDialogElement extends LitElement {
           <uui-toggle label="Let readers edit the template" .checked=${editable} @change=${(e: Event) => this.#set('editable', (e.target as HTMLInputElement).checked)}></uui-toggle>
           <uui-toggle label='Add an "Open in the UFM playground" link' .checked=${playground} @change=${(e: Event) => this.#set('playground', (e.target as HTMLInputElement).checked)}></uui-toggle>
           <uui-toggle label="Include the script (once per page)" .checked=${script} @change=${(e: Event) => this.#set('script', (e.target as HTMLInputElement).checked)}></uui-toggle>
+          ${this.stateWithUnused
+            ? html`<uui-toggle
+                label="Include properties the template doesn't use"
+                .checked=${unused}
+                @change=${(e: Event) => this.#set('unused', (e.target as HTMLInputElement).checked)}></uui-toggle>`
+            : nothing}
           ${mode === 'block'
             ? html`<label class="icon">
                 <span>Block icon</span>
@@ -105,10 +120,10 @@ export class UfmEmbedDialogElement extends LitElement {
         </div>
 
         <h3>Preview</h3>
-        ${this.state
+        ${this.#state
           ? html`<ufm-preview
-              .template=${this.state.template}
-              .values=${this.state.values}
+              .template=${this.#state.template}
+              .values=${this.#state.values}
               .mode=${mode}
               .icon=${icon || DEFAULT_ICON}
               .showTemplate=${showTemplate}

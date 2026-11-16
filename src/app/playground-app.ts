@@ -32,9 +32,16 @@ interface Block {
    */
   rest: Values;
   restSettings: Values;
+  /**
+   * Aliases (`$settings.`-prefixed for settings) of used values worth keeping in `rest` when the
+   * template stops using them: loaded or edited ones, rather than samples made up while typing.
+   */
+  kept: Set<string>;
 }
 
-const emptyBlock = (): Block => ({ props: new Map(), settings: new Map(), rest: {}, restSettings: {} });
+const emptyBlock = (): Block => ({ props: new Map(), settings: new Map(), rest: {}, restSettings: {}, kept: new Set() });
+const copyBlock = (block: Block): Block => ({ ...block, props: new Map(block.props), settings: new Map(block.settings), kept: new Set(block.kept) });
+const hasUnused = (blocks: Array<Block>) => blocks.some((b) => Object.keys(b.rest).length || Object.keys(b.restSettings).length);
 
 const MODES: Array<{ value: PreviewMode; name: string }> = [
   { value: 'block', name: 'Block label' },
@@ -123,9 +130,9 @@ export class UfmPlaygroundAppElement extends LitElement {
     this._blocks = this._blocks.map((block, i) => {
       const given = pending?.values[i];
       const { $settings, $index: _, ...givenProps } = given ?? {};
-      const props = this.#syncPlaceholders(block.props, block.rest, analysis.properties, given ? givenProps : undefined, kinds, '');
-      const settings = this.#syncPlaceholders(block.settings, block.restSettings, analysis.settings, given ? (($settings as Values) ?? {}) : undefined, kinds, '$settings.');
-      return { props: props.used, rest: props.rest, settings: settings.used, restSettings: settings.rest };
+      const props = this.#syncPlaceholders(block.props, block.rest, block.kept, analysis.properties, given ? givenProps : undefined, kinds, '');
+      const settings = this.#syncPlaceholders(block.settings, block.restSettings, block.kept, analysis.settings, given ? (($settings as Values) ?? {}) : undefined, kinds, '$settings.');
+      return { props: props.used, rest: props.rest, settings: settings.used, restSettings: settings.rest, kept: new Set([...props.kept, ...settings.kept]) };
     });
     this._analysis = analysis;
     this._markup = await context.parse(this._template, this._mode !== 'description');
@@ -136,28 +143,38 @@ export class UfmPlaygroundAppElement extends LitElement {
   /**
    * Works out the placeholders for the properties the template uses, from (in order) what's loaded,
    * what's already there, values the template wasn't using, and values edited earlier. Anything else
-   * gets a sample value, or is unset if the values are exact.
+   * gets a sample value, or is unset if the values are exact. Samples aren't kept once unused, so
+   * typing an alias doesn't leave a property behind for each partial one.
    */
   #syncPlaceholders(
     current: Map<string, Placeholder>,
     rest: Values,
+    kept: Set<string>,
     usages: Map<string, AliasUsage>,
     given: Values | undefined,
     kinds: Record<string, ValueKind> | undefined,
     prefix: string,
   ) {
     const used = new Map<string, Placeholder>();
-    // Every value known for this block, whether or not the template uses it
-    const pool: Values = given ? { ...given } : { ...rest, ...this.#toValues(current) };
+    const nowKept = new Set<string>();
+    // Every value worth keeping for this block, whether or not the template uses it
+    const pool: Values = given ? { ...given } : { ...rest, ...this.#toValues(new Map([...current].filter(([alias]) => kept.has(prefix + alias)))) };
     for (const [alias, usage] of usages) {
-      const kind = kinds?.[prefix + alias] ?? (alias in pool ? kindFromValue(pool[alias], inferKind(usage)) : inferKind(usage));
-      if (!given && current.has(alias)) used.set(alias, current.get(alias)!);
-      else if (alias in pool) used.set(alias, fromRuntimeValue(pool[alias], kind));
-      else if (!given && this.#remembered.has(prefix + alias)) used.set(alias, this.#remembered.get(prefix + alias)!);
-      else used.set(alias, this._exact ? { ...samplePlaceholder(usage, kind), unset: true } : samplePlaceholder(usage, kind));
+      const key = prefix + alias;
+      const kind = kinds?.[key] ?? (alias in pool ? kindFromValue(pool[alias], inferKind(usage)) : inferKind(usage));
+      if (!given && current.has(alias)) {
+        used.set(alias, current.get(alias)!);
+        if (kept.has(key)) nowKept.add(key);
+      } else if (alias in pool) {
+        used.set(alias, fromRuntimeValue(pool[alias], kind));
+        nowKept.add(key);
+      } else if (!given && this.#remembered.has(key)) {
+        used.set(alias, this.#remembered.get(key)!);
+        nowKept.add(key);
+      } else used.set(alias, this._exact ? { ...samplePlaceholder(usage, kind), unset: true } : samplePlaceholder(usage, kind));
       delete pool[alias];
     }
-    return { used, rest: pool };
+    return { used, rest: pool, kept: nowKept };
   }
 
   #updateLanguageData(catalogue: Awaited<ReturnType<typeof getCatalogue>>) {
@@ -223,19 +240,22 @@ export class UfmPlaygroundAppElement extends LitElement {
     return values;
   }
 
-  #blockValues(block: Block, index: number): Values {
-    const item = { ...block.rest, ...this.#toValues(block.props) };
-    if (block.settings.size || Object.keys(block.restSettings).length) item.$settings = { ...block.restSettings, ...this.#toValues(block.settings) };
+  #blockValues(block: Block, index: number, unused = true): Values {
+    const rest = unused ? block.rest : {};
+    const restSettings = unused ? block.restSettings : {};
+    const item = { ...rest, ...this.#toValues(block.props) };
+    if (block.settings.size || Object.keys(restSettings).length) item.$settings = { ...restSettings, ...this.#toValues(block.settings) };
     item.$index = index;
     return item;
   }
 
-  #state(): PlaygroundState {
+  /** The playground's state, optionally without the values the template doesn't use. */
+  #state(unused = true): PlaygroundState {
     const kinds: Record<string, ValueKind> = {};
     const values = this._blocks.map((block) => {
       block.props.forEach((p, alias) => (kinds[alias] = p.kind));
       block.settings.forEach((p, alias) => (kinds[`$settings.${alias}`] = p.kind));
-      const { $index: _, ...item } = this.#blockValues(block, 0);
+      const { $index: _, ...item } = this.#blockValues(block, 0, unused);
       return item;
     });
     return { template: this._template, mode: this._mode, values: values.length === 1 ? values[0] : values, kinds, ...(this._exact ? { exact: true } : {}) };
@@ -273,7 +293,7 @@ export class UfmPlaygroundAppElement extends LitElement {
     const kindChanged = this._blocks[index]?.[group].get(alias)?.kind !== placeholder.kind;
     const usage = (group === 'props' ? this._analysis?.properties : this._analysis?.settings)?.get(alias);
     this._blocks = this._blocks.map((b, i) => {
-      if (i === index) return { ...b, [group]: new Map(b[group]).set(alias, placeholder) };
+      if (i === index) return { ...b, [group]: new Map(b[group]).set(alias, placeholder), kept: new Set(b.kept).add(group === 'settings' ? `$settings.${alias}` : alias) };
       const other = b[group].get(alias);
       if (!kindChanged || !other) return b;
       return { ...b, [group]: new Map(b[group]).set(alias, convertPlaceholder(other, placeholder.kind, usage)) };
@@ -288,13 +308,13 @@ export class UfmPlaygroundAppElement extends LitElement {
 
   #addBlock() {
     const template = this._blocks[this._blocks.length - 1];
-    this._blocks = [...this._blocks, template ? { ...template, props: new Map(template.props), settings: new Map(template.settings) } : emptyBlock()];
+    this._blocks = [...this._blocks, template ? copyBlock(template) : emptyBlock()];
     this.#saveState();
   }
 
   #duplicateBlock(index: number) {
     const block = this._blocks[index];
-    this._blocks = [...this._blocks.slice(0, index + 1), { ...block, props: new Map(block.props), settings: new Map(block.settings) }, ...this._blocks.slice(index + 1)];
+    this._blocks = [...this._blocks.slice(0, index + 1), copyBlock(block), ...this._blocks.slice(index + 1)];
     this.#saveState();
   }
 
@@ -308,9 +328,10 @@ export class UfmPlaygroundAppElement extends LitElement {
     if (this._showDebug) track('Debug panel');
   }
 
-  async #copyLink() {
-    await navigator.clipboard.writeText(location.href);
-    track('Copy link');
+  async #copyLink(unused = false) {
+    this.renderRoot.querySelector<HTMLElement>('#link-options')?.hidePopover();
+    await navigator.clipboard.writeText(`${location.origin}${location.pathname}#${encodeState(this.#state(unused))}`);
+    track('Copy link', { unused });
     this._copied = true;
     setTimeout(() => (this._copied = false), 2000);
   }
@@ -326,9 +347,21 @@ export class UfmPlaygroundAppElement extends LitElement {
           <span class="version">Umbraco ${__UMBRACO_VERSION__}</span>
         </div>
         <div class="actions">
-          <uui-button look="primary" color="default" label="Copy link" .state=${this._copied ? 'success' : undefined} @click=${this.#copyLink}>
-            <uui-icon name="icon-link"></uui-icon> Copy link
-          </uui-button>
+          <uui-button-group>
+            <uui-button look="primary" color="default" label="Copy link" .state=${this._copied ? 'success' : undefined} @click=${() => this.#copyLink()}>
+              <uui-icon name="icon-link"></uui-icon> Copy link
+            </uui-button>
+            ${hasUnused(this._blocks)
+              ? html`<uui-button look="primary" color="default" compact label="More link options" popovertarget="link-options">
+                  <uui-symbol-expand open></uui-symbol-expand>
+                </uui-button>`
+              : nothing}
+          </uui-button-group>
+          <uui-popover-container id="link-options" placement="bottom-end">
+            <div class="popover">
+              <uui-button look="default" label="Copy link with unused properties" @click=${() => this.#copyLink(true)}></uui-button>
+            </div>
+          </uui-popover-container>
           <uui-button look="outline" color="default" label="Embed code" title="Show this on another page, like a blog post" @click=${() => this.renderRoot.querySelector('ufm-embed-dialog')?.open()}>
             <uui-icon name="icon-code"></uui-icon> Embed code
           </uui-button>
@@ -364,7 +397,7 @@ export class UfmPlaygroundAppElement extends LitElement {
         </div>
         <div class="column">${this.#renderOutput()}</div>
       </main>
-      <ufm-embed-dialog .state=${this.#state()}></ufm-embed-dialog>
+      <ufm-embed-dialog .state=${this.#state(false)} .stateWithUnused=${hasUnused(this._blocks) ? this.#state() : undefined}></ufm-embed-dialog>
       <footer>
         Placeholder values stand in for your content: names for content, media and member pickers aren't looked up, they're just what you enter.
         Built by Joe Glombek, using the <a href="https://www.npmjs.com/package/@umbraco-cms/backoffice" target="_blank">@umbraco-cms/backoffice</a> package. Not affiliated with Umbraco HQ.
@@ -539,8 +572,12 @@ export class UfmPlaygroundAppElement extends LitElement {
       ${block.props.size ? html`<h3>Content</h3>${editors('props', block.props, this._analysis?.properties)}` : nothing}
       ${block.settings.size ? html`<h3>Settings</h3>${editors('settings', block.settings, this._analysis?.settings)}` : nothing}
       ${others.length
-        ? html`<h3>Other properties</h3>
-            <p class="hint">This block's other values, which the template doesn't use (yet).</p>
+        ? html`<!-- Rendered in the block list editor's shadow root, so styled inline -->
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+              <h3>Other properties</h3>
+              <uui-button compact look="secondary" color="danger" label="Remove all" title="Remove every property the template doesn't use, from all blocks" @click=${() => this.#removeAllOthers()}></uui-button>
+            </div>
+            <p class="hint">This block's other values, which the template doesn't use (yet). They're left out of shared links and embeds unless you include them.</p>
             ${others.map(
               ({ alias, group, placeholder }) => html`<div class="other">
                 <ufm-value-editor
@@ -549,6 +586,9 @@ export class UfmPlaygroundAppElement extends LitElement {
                   .placeholder=${placeholder}
                   @change=${(e: CustomEvent<Placeholder>) => this.#updateRest(index, group, alias, e.detail)}></ufm-value-editor>
                 <uui-button compact look="secondary" label="Use in template" @click=${() => this.#useInTemplate(alias, group)}></uui-button>
+                <uui-button compact look="secondary" color="danger" label="Remove ${alias} from all blocks" title="Remove from all blocks" @click=${() => this.#removeOther(alias, group)}>
+                  <uui-icon name="icon-trash"></uui-icon>
+                </uui-button>
               </div>`,
             )}`
         : nothing}
@@ -577,6 +617,31 @@ export class UfmPlaygroundAppElement extends LitElement {
       return; // e.g. JSON that isn't valid yet
     }
     this._blocks = this._blocks.map((b, i) => (i === index ? { ...b, [group]: { ...b[group], [alias]: value } } : b));
+    this.#saveState();
+  }
+
+  /** Removes a property the template doesn't use from every block, and forgets it, so retyping its alias starts afresh. */
+  #removeOther(alias: string, group: 'rest' | 'restSettings') {
+    const key = group === 'restSettings' ? `$settings.${alias}` : alias;
+    this.#remembered.delete(key);
+    delete this.#restKinds[key];
+    this._blocks = this._blocks.map((b) => {
+      const { [alias]: _, ...rest } = b[group];
+      return { ...b, [group]: rest };
+    });
+    this.#afterRemovingOthers();
+  }
+
+  #removeAllOthers() {
+    const used = new Set([...(this._analysis?.properties.keys() ?? []), ...[...(this._analysis?.settings.keys() ?? [])].map((a) => `$settings.${a}`)]);
+    for (const key of this.#remembered.keys()) if (!used.has(key)) this.#remembered.delete(key);
+    this.#restKinds = {};
+    this._blocks = this._blocks.map((b) => ({ ...b, rest: {}, restSettings: {} }));
+    this.#afterRemovingOthers();
+  }
+
+  #afterRemovingOthers() {
+    if (this.#catalogue) this.#updateLanguageData(this.#catalogue);
     this.#saveState();
   }
 
@@ -626,6 +691,12 @@ export class UfmPlaygroundAppElement extends LitElement {
       display: flex;
       flex-wrap: wrap;
       gap: var(--uui-size-space-2);
+    }
+    .popover {
+      padding: var(--uui-size-space-2);
+      border-radius: var(--uui-border-radius);
+      background: var(--uui-color-surface);
+      box-shadow: var(--uui-shadow-depth-3);
     }
     header uui-button[look='outline'] {
       --uui-button-contrast: var(--uui-color-header-contrast-emphasis);

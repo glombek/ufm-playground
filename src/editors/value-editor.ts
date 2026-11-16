@@ -50,6 +50,8 @@ export class UfmValueEditorElement extends LitElement {
   }
 
   #set(value: unknown) {
+    // Some editors (e.g. TipTap) fire a change as they load a value, which isn't an edit
+    if (JSON.stringify(value) === JSON.stringify(this.placeholder?.value)) return;
     this.#change({ ...this.placeholder!, value } as Placeholder);
   }
 
