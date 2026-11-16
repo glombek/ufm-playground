@@ -54,6 +54,7 @@ export default defineConfig({
         index: fileURLToPath(new URL('./index.html', import.meta.url)),
         embedDemo: fileURLToPath(new URL('./embed.html', import.meta.url)),
         bookmarklet: fileURLToPath(new URL('./bookmarklet/index.html', import.meta.url)),
+        plausible: fileURLToPath(new URL('./plausible/index.html', import.meta.url)),
         embed: fileURLToPath(new URL('./src/embed.ts', import.meta.url)),
       },
       output: {

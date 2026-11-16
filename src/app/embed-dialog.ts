@@ -3,6 +3,7 @@
  * with `<ufm-preview>`, see how it'll look, and copy the code.
  */
 import { css, html, LitElement, nothing } from '@umbraco-cms/backoffice/external/lit';
+import { track } from '../analytics.js';
 import type { PlaygroundState } from '../state.js';
 import '../components/ufm-preview.js';
 
@@ -46,6 +47,7 @@ export class UfmEmbedDialogElement extends LitElement {
 
   open() {
     this.shadowRoot?.querySelector('dialog')?.showModal();
+    track('Embed dialog');
   }
 
   #close() {
@@ -74,6 +76,8 @@ export class UfmEmbedDialogElement extends LitElement {
 
   async #copy() {
     await navigator.clipboard.writeText(this.#code);
+    const { showTemplate, editable, playground, script } = this._options;
+    track('Copy embed code', { showTemplate: showTemplate || editable, editable, playground, script });
     this._copied = true;
     setTimeout(() => (this._copied = false), 2000);
   }

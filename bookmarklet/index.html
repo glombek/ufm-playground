@@ -62,6 +62,7 @@
         font-size: 0.95em;
       }
     </style>
+    <script defer data-domain="ufm-playground.joe.gl" src="https://anonymousdata.joe.gl/js/script.js"></script>
   </head>
   <body>
     <h1>Send to UFM Playground</h1>
@@ -101,6 +102,7 @@
     </p>
 
     <script type="module">
+      import { track } from '/src/analytics.ts';
       const link = document.getElementById('bookmarklet');
       const copy = document.getElementById('copy');
       document.getElementById('version').textContent = __UMBRACO_VERSION__;
@@ -114,6 +116,7 @@
         e.preventDefault();
         alert('Drag this link to your bookmarks bar, then click it while you are in the Umbraco backoffice.');
       });
+      link.addEventListener('dragstart', () => track('Bookmarklet drag'));
       copy.hidden = false;
       copy.addEventListener('click', async () => {
         await navigator.clipboard.writeText(`javascript:${encodeURIComponent(code)}`);

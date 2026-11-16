@@ -15,6 +15,7 @@ import '../components/ufm-preview.js';
 import '../editors/block-list-editor.js';
 import './embed-dialog.js';
 import { setUfmLanguageData } from '../editors/ufm-language/data.js';
+import { track } from '../analytics.js';
 import { decodeState, encodeState, type PlaygroundState } from '../state.js';
 import { getCatalogue, getTerms, hasTerm, startUfm } from '../ufm/runtime.js';
 import { iconNames } from '../ufm/ui.js';
@@ -82,7 +83,10 @@ export class UfmPlaygroundAppElement extends LitElement {
 
   override connectedCallback() {
     super.connectedCallback();
-    this.#load(decodeState(location.hash) ?? EXAMPLES[0]);
+    const shared = decodeState(location.hash);
+    // Only the bookmarklet sends exact values
+    if (shared) track('Open state', { from: shared.exact ? 'bookmarklet' : 'link' });
+    this.#load(shared ?? EXAMPLES[0]);
     window.addEventListener('hashchange', this.#onHashChange);
   }
 
@@ -253,12 +257,14 @@ export class UfmPlaygroundAppElement extends LitElement {
     const select = e.target as HTMLElement & { value: string };
     const example = EXAMPLES[Number(select.value)];
     if (!example) return;
+    track('Example', { name: example.name });
     this.#remembered.clear();
     this.#load(example);
   }
 
   #onMode(e: Event) {
     this._mode = (e.target as HTMLElement & { value: string }).value as PreviewMode;
+    track('Mode', { mode: this._mode });
     void this.#analyse();
   }
 
@@ -297,8 +303,14 @@ export class UfmPlaygroundAppElement extends LitElement {
     this.#saveState();
   }
 
+  #toggleDebug() {
+    this._showDebug = !this._showDebug;
+    if (this._showDebug) track('Debug panel');
+  }
+
   async #copyLink() {
     await navigator.clipboard.writeText(location.href);
+    track('Copy link');
     this._copied = true;
     setTimeout(() => (this._copied = false), 2000);
   }
@@ -369,7 +381,7 @@ export class UfmPlaygroundAppElement extends LitElement {
     ];
     const tab = tabs.find((t) => t.id === this._debugTab)!;
     return html`<uui-box headline="Debug">
-      <uui-button slot="header-actions" compact look="secondary" label=${this._showDebug ? 'Hide' : 'Show'} @click=${() => (this._showDebug = !this._showDebug)}></uui-button>
+      <uui-button slot="header-actions" compact look="secondary" label=${this._showDebug ? 'Hide' : 'Show'} @click=${this.#toggleDebug}></uui-button>
       ${this._showDebug
         ? html`
             <uui-tab-group>
