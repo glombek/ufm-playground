@@ -11,7 +11,7 @@
     "test:bookmarklet": "node tests/bookmarklet.test.mjs"
   },
   "dependencies": {
-    "@umbraco-cms/backoffice": "^18.3.1",
+    "@umbraco-cms/backoffice": "^19.0.0-rc1",
     "monaco-editor": "^0.55.1"
   },
   "devDependencies": {
