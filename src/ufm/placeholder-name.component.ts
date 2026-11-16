@@ -1,6 +1,6 @@
 /**
- * Stand-in for the `umbContentName`, `umbMemberName` and `umbLink` components. The real ones
- * look picked items up with the Management API; this renders names straight from the value, so
+ * Stand-in for the `umbContentName`, `umbMemberName`, `umbElementName` and `umbLink` components. The
+ * real ones look picked items up with the Management API; this renders names straight from the value, so
  * a placeholder value of `"Contact us"`, `["Contact us", "About us"]` or
  * `[{ "name": "Make an enquiry", "url": "/contact" }]` renders as the real thing would.
  */

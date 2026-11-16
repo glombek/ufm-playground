@@ -42,7 +42,7 @@ export const KINDS: Record<ValueKind, { label: string; description: string; icon
   number: { label: 'Number', description: 'A numeric or slider.', icon: 'icon-autofill' },
   list: { label: 'List', description: 'Repeatable textstrings, a checkbox list or a dropdown.', icon: 'icon-ordered-list' },
   tags: { label: 'Tags', description: 'Tags.', icon: 'icon-tags' },
-  names: { label: 'Picked items', description: 'A content, media or member picker. Names are shown as entered, not looked up.', icon: 'icon-document' },
+  names: { label: 'Picked items', description: 'A content, media, member or element picker. Names are shown as entered, not looked up.', icon: 'icon-document' },
   links: { label: 'Links', description: 'A multi URL picker.', icon: 'icon-link' },
   blocks: { label: 'Nested blocks', description: 'A block list.', icon: 'icon-thumbnail-list' },
   object: { label: 'JSON', description: 'Anything else, e.g. a colour picker\'s { "label", "value" }.', icon: 'icon-brackets' },
