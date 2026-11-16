@@ -30,14 +30,14 @@ interface LabelGroup {
   blocks: Array<{ values: Values; text: string; names: Record<string, PickedNames> }>;
 }
 
-/** Names looked up by a picker component (`UFM-CONTENT-NAME`, `UFM-MEMBER-NAME` or `UFM-LINK`). */
+/** Names looked up by a picker component (`UFM-CONTENT-NAME`, `UFM-MEMBER-NAME`, `UFM-ELEMENT-NAME` or `UFM-LINK`). */
 interface PickedNames {
   component: string;
   names: Array<string>;
 }
 
 const BLOCK_ENTRIES = new Set(['UMB-BLOCK-LIST-ENTRY', 'UMB-BLOCK-GRID-ENTRY', 'UMB-RTE-BLOCK', 'UMB-RTE-BLOCK-INLINE']);
-const PICKER_COMPONENTS = new Set(['UFM-CONTENT-NAME', 'UFM-MEMBER-NAME', 'UFM-LINK']);
+const PICKER_COMPONENTS = new Set(['UFM-CONTENT-NAME', 'UFM-MEMBER-NAME', 'UFM-ELEMENT-NAME', 'UFM-LINK']);
 const OVERLAY_ID = 'ufm-playground-bookmarklet';
 
 /** Finds every block label on the page, grouped by property and template. */
@@ -78,7 +78,7 @@ function findLabels(): Array<LabelGroup> {
   return [...groups.values()];
 }
 
-/** The names umbContentName, umbMemberName and umbLink have looked up, by property alias. */
+/** The names umbContentName, umbMemberName, umbElementName and umbLink have looked up, by property alias. */
 function pickedNames(render: UfmRenderElement) {
   const names: Record<string, PickedNames> = {};
   const walk = (root: Element | ShadowRoot) => {

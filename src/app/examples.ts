@@ -19,6 +19,12 @@ export const EXAMPLES: Array<PlaygroundState & { name: string }> = [
     kinds: { page: 'names' },
   },
   {
+    name: 'Element picker',
+    template: 'Promotions: {umbElementName: promotions}',
+    values: { promotions: ['Summer sale', 'Free delivery'] },
+    kinds: { promotions: 'names' },
+  },
+  {
     name: 'Multi URL picker',
     template: 'Call to Action: {umbLink: link} (${ link[0].url })',
     values: { link: [{ name: 'Make an enquiry', url: 'https://example.com/contact' }] },

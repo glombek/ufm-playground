@@ -159,7 +159,7 @@ function analyseComponent(prefix: string, content: string, source: string, analy
   }
 
   const entry = usage(analysis.properties, alias);
-  if (component.alias === 'umbContentName' || component.alias === 'umbMemberName') entry.hints.add('names');
+  if (['umbContentName', 'umbMemberName', 'umbElementName'].includes(component.alias)) entry.hints.add('names');
   if (component.alias === 'umbLink') entry.hints.add('links');
 
   for (const filter of filters) {

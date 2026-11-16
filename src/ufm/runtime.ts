@@ -54,6 +54,13 @@ const componentManifests: Array<ManifestUfmComponent> = [
     api: () => import('./placeholder-name.component.js'),
     meta: { alias: 'umbMemberName' },
   },
+  {
+    type: 'ufmComponent',
+    alias: 'Umb.Markdown.ElementName',
+    name: 'Element Name UFM Component (placeholder)',
+    api: () => import('./placeholder-name.component.js'),
+    meta: { alias: 'umbElementName' },
+  },
 ];
 
 class UfmRuntimeHostElement extends UmbLitElement {}

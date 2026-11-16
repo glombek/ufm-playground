@@ -18,7 +18,7 @@ In the backoffice, UFM is wired up by the extension registry and a global contex
 - creates one UFM context and provides it to the whole page,
 - registers the backoffice's English translations, for `umbLocalize`.
 
-The `umbContentName`, `umbMemberName` and `umbLink` components look picked items up with the Management API, so they're swapped for a stand-in (`src/ufm/placeholder-name.component.ts`) that renders names straight from the values.
+The `umbContentName`, `umbMemberName`, `umbElementName` and `umbLink` components look picked items up with the Management API, so they're swapped for a stand-in (`src/ufm/placeholder-name.component.ts`) that renders names straight from the values.
 
 `src/ufm/ui.ts` loads the UUI component library, its theme and font, and Umbraco's icons, so templates can use `<uui-tag>`, `<umb-icon>` and friends.
 
