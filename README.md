@@ -57,7 +57,7 @@ npm run dev
 
 ### Updating Umbraco
 
-Bump `@umbraco-cms/backoffice` in `package.json`, then `npm install && npm run build && npm test`. If an example's output changes, check it against a real Umbraco site (the UFM cheat sheet's sample project has every example in it) before updating `tests/examples.test.mjs`.
+Bump `@umbraco-cms/backoffice` in `package.json`, then `npm install && npm run build && npm test`. If an example's output changes, check it against a real Umbraco site before updating `tests/examples.test.mjs`.
 
 ## Deploying to GitHub Pages
 
@@ -73,7 +73,7 @@ It's served from the root of its own domain, [ufm-playground.joe.gl](https://ufm
 <ufm-preview template="Call to Action: {umbContentName: page}" values='{"page": "Contact us"}'></ufm-preview>
 ```
 
-See `embed.html` (or `/embed.html` on the deployed site) for all the options. The playground's **Copy embed code** button gives you the element for whatever's in the playground.
+See `embed.html` (or `/embed.html` on the deployed site) for all the options. The playground's **Embed code** button gives you the element for whatever's in the playground.
 
 ## The bookmarklet
 

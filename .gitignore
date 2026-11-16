@@ -1,3 +1,5 @@
 node_modules/
 dist/
 bookmarklet-test-failure.png
+CLAUDE.local.md
+.claude/settings.local.json
