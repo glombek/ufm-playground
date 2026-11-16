@@ -6,7 +6,8 @@
  *   <ufm-preview template="Call to action: {umbContentName: page}" values='{"page": "Contact us"}'></ufm-preview>
  *
  * - `values`: a JSON object of property values (plus `$settings`), or an array of them for several
- *   blocks. Any alias the template uses that isn't given gets a placeholder value.
+ *   blocks. Any alias the template uses that isn't given gets a placeholder value. A block (or nested
+ *   block) with `"$library": "Name"` is an element from the element library.
  * - `mode`: `block` (default), `collection` or `description`.
  * - `icon`: the block's icon, e.g. `icon-document`.
  * - `show-template`: also show the template.
@@ -15,7 +16,7 @@
  */
 import { css, html, LitElement, nothing } from '@umbraco-cms/backoffice/external/lit';
 import { analyse } from '../analysis/analyse.js';
-import { samplePlaceholder, toRuntimeValue } from '../analysis/placeholders.js';
+import { libraryNameOf, samplePlaceholder, toRuntimeValue } from '../analysis/placeholders.js';
 import { getCatalogue, startUfm } from '../ufm/runtime.js';
 import { startIcons } from '../ufm/ui.js';
 import { playgroundUrl } from '../state.js';
@@ -170,16 +171,20 @@ export class UfmPreviewElement extends LitElement {
           </div>
         `;
       default:
-        return html`${items.map(
-          (item, i) => html`<div class="block">
+        return html`${items.map((item, i) => {
+          // Umbraco shows a library element's name, rather than rendering the label
+          const libraryName = libraryNameOf(item);
+          return html`<div class="block">
             <umb-icon name=${this.icon}></umb-icon>
-            <umb-ufm-render
-              inline
-              .markdown=${this.#template}
-              .value=${item}
-              @umb-ufm-resolved=${(e: CustomEvent<{ text: string }>) => this.#resolved(i, e)}></umb-ufm-render>
-          </div>`,
-        )}`;
+            ${libraryName === undefined
+              ? html`<umb-ufm-render
+                  inline
+                  .markdown=${this.#template}
+                  .value=${item}
+                  @umb-ufm-resolved=${(e: CustomEvent<{ text: string }>) => this.#resolved(i, e)}></umb-ufm-render>`
+              : html`<span class="library-name"><uui-icon name="icon-link"></uui-icon> ${libraryName}</span>`}
+          </div>`;
+        })}`;
     }
   }
 
@@ -250,6 +255,11 @@ export class UfmPreviewElement extends LitElement {
       border: 1px solid var(--uui-color-border, #d8d7d9);
       border-radius: 3px;
       background: var(--uui-color-surface, #fff);
+    }
+    .library-name {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
     }
     .block umb-icon {
       flex: none;

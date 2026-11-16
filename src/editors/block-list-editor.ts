@@ -15,6 +15,7 @@ export class UfmBlockListEditorElement<T = unknown> extends LitElement {
     icon: { type: String },
     blockName: { type: String, attribute: 'block-name' },
     labelValue: { attribute: false },
+    libraryName: { attribute: false },
     renderBlockEditor: { attribute: false },
     _open: { state: true },
   };
@@ -27,6 +28,8 @@ export class UfmBlockListEditorElement<T = unknown> extends LitElement {
   blockName = 'block';
   /** The value the label is rendered with. */
   labelValue: (block: T, index: number) => unknown = (block) => block;
+  /** The name of the element-library element a block is, if it is one. Umbraco 19 shows this instead of the label. */
+  libraryName: (block: T) => string | undefined = () => undefined;
   /** Renders the editor shown when a block's open. */
   renderBlockEditor: (block: T, index: number) => TemplateResult | typeof nothing = () => nothing;
 
@@ -54,6 +57,7 @@ export class UfmBlockListEditorElement<T = unknown> extends LitElement {
 
   #renderBlock(block: T, index: number) {
     const open = this._open === index;
+    const libraryName = this.libraryName(block);
     return html`
       <div class="block ${open ? 'open' : ''}">
         <div class="header">
@@ -65,7 +69,9 @@ export class UfmBlockListEditorElement<T = unknown> extends LitElement {
             @click=${() => (this._open = open ? undefined : index)}>
             <uui-symbol-expand ?open=${open}></uui-symbol-expand>
             <umb-icon name=${this.icon}></umb-icon>
-            <umb-ufm-render inline .markdown=${this.label} .value=${this.labelValue(block, index)}></umb-ufm-render>
+            ${libraryName === undefined
+              ? html`<umb-ufm-render inline .markdown=${this.label} .value=${this.labelValue(block, index)}></umb-ufm-render>`
+              : html`<span class="library-name"><uui-icon name="icon-link"></uui-icon> ${libraryName}</span>`}
           </button>
           <uui-action-bar>
             <uui-button label="Copy" title="Add a copy of this ${this.blockName}" @click=${() => this.#fire('duplicate', index)}>
@@ -120,6 +126,11 @@ export class UfmBlockListEditorElement<T = unknown> extends LitElement {
     .open-button umb-icon {
       flex: none;
       font-size: 1.2em;
+    }
+    .library-name {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--uui-size-space-2);
     }
     uui-action-bar {
       margin-right: var(--uui-size-space-3);

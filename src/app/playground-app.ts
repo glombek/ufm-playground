@@ -6,6 +6,8 @@ import {
   inferKind,
   kindFromValue,
   KINDS,
+  LIBRARY_KEY,
+  libraryNameOf,
   samplePlaceholder,
   toRuntimeValue,
   type Placeholder,
@@ -38,7 +40,12 @@ interface Block {
    * template stops using them: loaded or edited ones, rather than samples made up while typing.
    */
   kept: Set<string>;
+  /** The name of the element-library element this block is, if it is one (Umbraco 19). */
+  library?: string;
 }
+
+/** What a block from the element library is called until it's renamed. */
+const NEW_LIBRARY_NAME = 'Shared element';
 
 const emptyBlock = (): Block => ({ props: new Map(), settings: new Map(), rest: {}, restSettings: {}, kept: new Set() });
 const copyBlock = (block: Block): Block => ({ ...block, props: new Map(block.props), settings: new Map(block.settings), kept: new Set(block.kept) });
@@ -133,10 +140,17 @@ export class UfmPlaygroundAppElement extends LitElement {
     const kinds = { ...this.#restKinds, ...pending?.kinds };
     this._blocks = this._blocks.map((block, i) => {
       const given = pending?.values[i];
-      const { $settings, $index: _, ...givenProps } = given ?? {};
+      const { $settings, $index: _, [LIBRARY_KEY]: __, ...givenProps } = given ?? {};
       const props = this.#syncPlaceholders(block.props, block.rest, block.kept, analysis.properties, given ? givenProps : undefined, kinds, '');
       const settings = this.#syncPlaceholders(block.settings, block.restSettings, block.kept, analysis.settings, given ? (($settings as Values) ?? {}) : undefined, kinds, '$settings.');
-      return { props: props.used, rest: props.rest, settings: settings.used, restSettings: settings.rest, kept: new Set([...props.kept, ...settings.kept]) };
+      return {
+        props: props.used,
+        rest: props.rest,
+        settings: settings.used,
+        restSettings: settings.rest,
+        kept: new Set([...props.kept, ...settings.kept]),
+        library: given ? libraryNameOf(given) : block.library,
+      };
     });
     this._analysis = analysis;
     this._markup = await context.parse(this._template, this._mode !== 'description');
@@ -230,6 +244,37 @@ export class UfmPlaygroundAppElement extends LitElement {
     }
   }
 
+  /** The analysis's diagnostics, plus those about the element library, which depend on the values. */
+  get #diagnostics(): Array<Diagnostic> {
+    const diagnostics = [...(this._analysis?.diagnostics ?? [])];
+    if (this._mode !== 'block') return diagnostics;
+
+    const linked = this._blocks.filter((b) => b.library !== undefined).length;
+    if (linked) {
+      diagnostics.push({
+        severity: 'info',
+        message: `${linked === 1 ? 'A block is' : `${linked} blocks are`} from the element library, so Umbraco shows the element's name for ${linked === 1 ? 'it' : 'them'}, rather than this label.`,
+      });
+    }
+
+    // Library blocks in a nested block list are only in its layout, so contentData leaves them out
+    for (const [alias, usage] of this._analysis?.properties ?? []) {
+      if (!usage.members.has('contentData')) continue;
+      const nested = this._blocks.flatMap((b) => {
+        const placeholder = b.library === undefined ? b.props.get(alias) : undefined;
+        return placeholder?.kind === 'blocks' && !placeholder.unset ? placeholder.value : [];
+      });
+      const fromLibrary = nested.filter((item) => libraryNameOf(item) !== undefined).length;
+      if (!fromLibrary) continue;
+      diagnostics.push({
+        severity: 'warning',
+        message: `${fromLibrary} of the blocks in "${alias}" ${fromLibrary === 1 ? 'is' : 'are'} from the element library, so ${fromLibrary === 1 ? "isn't" : "aren't"} in ${alias}.contentData and this label leaves ${fromLibrary === 1 ? 'it' : 'them'} out. ${alias}.layout includes every block, but not library blocks' values.`,
+        source: `${alias}.contentData`,
+      });
+    }
+    return diagnostics;
+  }
+
   // ---- State --------------------------------------------------------------------------------
 
   #toValues(placeholders: Map<string, Placeholder>) {
@@ -249,6 +294,7 @@ export class UfmPlaygroundAppElement extends LitElement {
     const restSettings = unused ? block.restSettings : {};
     const item = { ...rest, ...this.#toValues(block.props) };
     if (block.settings.size || Object.keys(restSettings).length) item.$settings = { ...restSettings, ...this.#toValues(block.settings) };
+    if (block.library !== undefined) item[LIBRARY_KEY] = block.library;
     item.$index = index;
     return item;
   }
@@ -416,7 +462,7 @@ export class UfmPlaygroundAppElement extends LitElement {
               Try out <a href="https://docs.umbraco.com/umbraco-cms/reference/umbraco-flavored-markdown" target="_blank">Umbraco Flavored Markdown</a>, rendered by
               Umbraco's own UFM code. Completions pop up as you type (or press <kbd>Ctrl</kbd>+<kbd>Space</kbd>), and hover over anything for help.
             </p>
-            <ufm-template-editor .value=${this._template} .diagnostics=${this._analysis?.diagnostics ?? []} @input=${this.#onTemplateInput}></ufm-template-editor>
+            <ufm-template-editor .value=${this._template} .diagnostics=${this.#diagnostics} @input=${this.#onTemplateInput}></ufm-template-editor>
             ${this.#renderDiagnostics()}
           </uui-box>
           ${this.#renderDebug()}
@@ -483,7 +529,7 @@ export class UfmPlaygroundAppElement extends LitElement {
           settings: describe(this._analysis?.settings),
           usesIndex: this._analysis?.usesIndex,
           localizationKeys: this._analysis?.localizationKeys,
-          diagnostics: this._analysis?.diagnostics,
+          diagnostics: this.#diagnostics,
         });
       }
       case 'state':
@@ -492,7 +538,7 @@ export class UfmPlaygroundAppElement extends LitElement {
   }
 
   #renderDiagnostics() {
-    const diagnostics = this._analysis?.diagnostics ?? [];
+    const diagnostics = this.#diagnostics;
     if (!diagnostics.length) return html`<p class="ok"><uui-icon name="icon-check"></uui-icon> No problems found</p>`;
     return html`<ul class="diagnostics">
       ${diagnostics.map(
@@ -574,10 +620,41 @@ export class UfmPlaygroundAppElement extends LitElement {
       .icon=${icon}
       block-name=${blockName}
       .labelValue=${(block: Block, index: number) => this.#blockValues(block, index)}
-      .renderBlockEditor=${(block: Block, index: number) => this.#renderValueEditors(block, index)}
+      .libraryName=${(block: Block) => block.library}
+      .renderBlockEditor=${(block: Block, index: number) => html`${this.#renderLibraryOption(block, index)}${block.library === undefined ? this.#renderValueEditors(block, index) : nothing}`}
       @add=${this.#addBlock}
       @duplicate=${(e: CustomEvent<number>) => this.#duplicateBlock(e.detail)}
       @remove=${(e: CustomEvent<number>) => this.#removeBlock(e.detail)}></ufm-block-list-editor>`;
+  }
+
+  /** Whether a block is an element from the element library, which Umbraco 19 labels with the element's name. */
+  #renderLibraryOption(block: Block, index: number) {
+    const linked = block.library !== undefined;
+    // Rendered in the block list editor's shadow root, so styled inline
+    return html`<div style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px">
+        <uui-toggle
+          label="From the element library"
+          .checked=${linked}
+          @change=${(e: Event) => this.#setLibrary(index, (e.target as HTMLInputElement).checked ? NEW_LIBRARY_NAME : undefined)}></uui-toggle>
+        ${linked
+          ? html`<uui-input
+              label="Library element name"
+              placeholder="Library element name"
+              .value=${block.library ?? ''}
+              @input=${(e: Event) => this.#setLibrary(index, (e.target as HTMLInputElement).value)}></uui-input>`
+          : nothing}
+      </div>
+      ${linked
+        ? html`<p class="hint">
+            Umbraco shows a library element's name for its block, rather than this label, and its values belong to the element. Turn this off to edit
+            the block's own values.
+          </p>`
+        : nothing}`;
+  }
+
+  #setLibrary(index: number, name: string | undefined) {
+    this._blocks = this._blocks.map((b, i) => (i === index ? { ...b, library: name } : b));
+    this.#saveState();
   }
 
   #renderValueEditors(block: Block, index: number) {

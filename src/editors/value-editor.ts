@@ -13,7 +13,7 @@ import '@umb-core/components/input-toggle/input-toggle.element.js';
 import '@umb-tags/components/tags-input/tags-input.element.js';
 import '@umbraco-cms/backoffice/code-editor';
 import type { AliasUsage, ValueKind } from '../analysis/analyse.js';
-import { convertPlaceholder, humanise, KINDS, nestedAliasesOf, type Link, type Placeholder } from '../analysis/placeholders.js';
+import { convertPlaceholder, humanise, KINDS, LIBRARY_KEY, libraryNameOf, nestedAliasesOf, type Link, type Placeholder } from '../analysis/placeholders.js';
 import { registerRichTextEditor, richTextConfiguration } from './rich-text.js';
 
 registerRichTextEditor();
@@ -175,7 +175,18 @@ export class UfmValueEditorElement extends LitElement {
   #renderNestedBlocks(blocks: Array<Record<string, unknown>>) {
     const aliases = [
       ...new Set([...blocks.flatMap((b) => Object.keys(b)), ...this._extraColumns, ...(this.usage ? nestedAliasesOf(this.usage) : [])]),
-    ].filter((alias) => !this._removedColumns.includes(alias));
+    ].filter((alias) => alias !== LIBRARY_KEY && !this._removedColumns.includes(alias));
+    const newBlock = () => Object.fromEntries(aliases.map((a) => [a, `New ${humanise(a).toLowerCase()}`]));
+    // A library block keeps its local values, so turning it back into a local block restores them
+    const toggleLibrary = (index: number) =>
+      this.#set(
+        blocks.map((b, i) => {
+          if (i !== index) return b;
+          if (libraryNameOf(b) === undefined) return { ...b, [LIBRARY_KEY]: 'Shared element' };
+          const { [LIBRARY_KEY]: _, ...local } = b;
+          return local;
+        }),
+      );
     // Values that aren't text (e.g. a toggle's true, a picker's array) are shown, and edited, as JSON,
     // so they keep their type, as labels might depend on it
     const display = (value: unknown) => (value === undefined || value === null ? '' : typeof value === 'string' ? value : JSON.stringify(value));
@@ -242,20 +253,47 @@ export class UfmValueEditorElement extends LitElement {
         <uui-button compact look="secondary" label="Add a property" title="Add a property" @click=${addColumn}>
           <uui-icon name="icon-add"></uui-icon>
         </uui-button>
-        ${blocks.map(
-          (block, index) => html`
-            ${aliases.map(
-              (alias) => html`<uui-input
-                label="${humanise(alias)} for block ${index + 1}"
-                .value=${display(block[alias])}
-                @input=${(e: Event) => update(index, alias, String((e.target as Changeable).value ?? ''))}></uui-input>`,
-            )}
-            <uui-button compact label="Remove block ${index + 1}" title="Remove this block" @click=${() => this.#set(blocks.filter((_, i) => i !== index))}>
-              <uui-icon name="icon-trash"></uui-icon>
-            </uui-button>
-          `,
-        )}
+        ${blocks.map((block, index) => {
+          const libraryName = libraryNameOf(block);
+          return html`
+            ${libraryName === undefined
+              ? aliases.map(
+                  (alias) => html`<uui-input
+                    label="${humanise(alias)} for block ${index + 1}"
+                    .value=${display(block[alias])}
+                    @input=${(e: Event) => update(index, alias, String((e.target as Changeable).value ?? ''))}></uui-input>`,
+                )
+              : html`<uui-input
+                  class="library"
+                  style=${`grid-column: span ${Math.max(aliases.length, 1)}`}
+                  label="Library element name for block ${index + 1}"
+                  title="Its values are the library element's, so the template can't see them"
+                  .value=${libraryName}
+                  @input=${(e: Event) => update(index, LIBRARY_KEY, String((e.target as Changeable).value ?? ''))}>
+                  <uui-icon slot="prepend" name="icon-link"></uui-icon>
+                </uui-input>`}
+            <div class="row-actions">
+              <uui-button
+                compact
+                label=${libraryName === undefined ? `Make block ${index + 1} a library element` : `Make block ${index + 1} local`}
+                title=${libraryName === undefined ? 'Make this an element from the element library' : 'Make this a local block, with its own values'}
+                look=${libraryName === undefined ? 'default' : 'secondary'}
+                @click=${() => toggleLibrary(index)}>
+                <uui-icon name="icon-link"></uui-icon>
+              </uui-button>
+              <uui-button compact label="Remove block ${index + 1}" title="Remove this block" @click=${() => this.#set(blocks.filter((_, i) => i !== index))}>
+                <uui-icon name="icon-trash"></uui-icon>
+              </uui-button>
+            </div>
+          `;
+        })}
       </div>
+      ${blocks.some((b) => libraryNameOf(b) !== undefined)
+        ? html`<p class="hint">
+            <uui-icon name="icon-link"></uui-icon>
+            <span>Blocks from the element library are only in the value's <code>layout</code>, not its <code>contentData</code>, so the template can't read their values.</span>
+          </p>`
+        : nothing}
       ${(this.usage ? [...this.usage.nestedAliases] : [])
         .filter((alias) => this._removedColumns.includes(alias))
         .map(
@@ -264,11 +302,14 @@ export class UfmValueEditorElement extends LitElement {
             <uui-button compact look="secondary" label="Add it back" @click=${() => (this._removedColumns = this._removedColumns.filter((a) => a !== alias))}></uui-button>
           </p>`,
         )}
-      <uui-button
-        class="add"
-        look="placeholder"
-        label="Add block"
-        @click=${() => this.#set([...blocks, Object.fromEntries(aliases.map((a) => [a, `New ${humanise(a).toLowerCase()}`]))])}></uui-button>
+      <div class="add-buttons">
+        <uui-button class="add" look="placeholder" label="Add block" @click=${() => this.#set([...blocks, newBlock()])}></uui-button>
+        <uui-button
+          class="add"
+          look="placeholder"
+          label="Add from the element library"
+          @click=${() => this.#set([...blocks, { ...newBlock(), [LIBRARY_KEY]: 'Shared element' }])}></uui-button>
+      </div>
     `;
   }
 
@@ -321,9 +362,19 @@ export class UfmValueEditorElement extends LitElement {
       font-weight: 700;
       --uui-input-background-color: var(--uui-color-surface-alt);
     }
-    .nested + .add,
-    .hint + .add {
+    .nested + .add-buttons,
+    .hint + .add-buttons {
       margin-top: var(--uui-size-space-3);
+    }
+    .add-buttons {
+      display: flex;
+      gap: var(--uui-size-space-2);
+    }
+    .row-actions {
+      display: flex;
+    }
+    uui-input.library uui-icon {
+      margin-left: var(--uui-size-space-3);
     }
     .hint {
       display: flex;

@@ -96,6 +96,18 @@ export const EXAMPLES: Array<PlaygroundState & { name: string }> = [
     kinds: { tabs: 'blocks' },
   },
   {
+    name: 'Element library blocks',
+    template: 'Text module: {=heading}',
+    values: [{ heading: 'Contact us' }, { $library: 'Summer sale banner' }],
+  },
+  {
+    name: 'Nested blocks from the element library',
+    template:
+      'Tabs: ${ tabs.contentData.map((tab) => tab.values.find((v) => v.alias == "heading").value).join(" / ") } (${ tabs.layout["Umbraco.BlockList"].length } tabs)',
+    values: { tabs: [{ heading: 'Umbraco development' }, { $library: 'Our services' }, { heading: 'Front-end builds' }] },
+    kinds: { tabs: 'blocks' },
+  },
+  {
     name: 'Colour picker',
     template: 'Colour: ${ colour.label } (#${ colour.value })',
     values: { colour: { label: 'Raspberry', value: 'e91e63' } },

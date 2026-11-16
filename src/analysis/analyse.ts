@@ -272,6 +272,8 @@ function walk(node: Node | undefined, scope: Set<string>, ctx: WalkContext, pare
         receiver.hints.add('richText');
       } else if (node.name === 'contentData') {
         receiver.hints.add('blocks');
+        // Element library blocks aren't in contentData, which the playground warns about
+        receiver.members.add(node.name);
         return receiver;
       } else if (node.name === 'values' && receiver.hints.has('blocks')) {
         return receiver;

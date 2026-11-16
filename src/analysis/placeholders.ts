@@ -9,6 +9,22 @@ export interface Link {
   url: string;
 }
 
+/**
+ * Marks a block (top-level or nested) as an element from Umbraco 19's element library, with the
+ * element's name. Such blocks don't hold their own values: Umbraco shows the element's name rather
+ * than rendering the label template, and a block list's value only has them in its `layout`.
+ */
+export const LIBRARY_KEY = '$library';
+
+/** The library element's name, if the block is from the element library. */
+export function libraryNameOf(block: unknown): string | undefined {
+  const name = block && typeof block === 'object' ? (block as Record<string, unknown>)[LIBRARY_KEY] : undefined;
+  return typeof name === 'string' ? name : undefined;
+}
+
+/** What a library element's called when its name isn't known, e.g. in a value from a real site. */
+export const UNKNOWN_LIBRARY_NAME = 'Library element';
+
 /** The value each kind's editor works with. */
 export interface PlaceholderValues {
   text: string;
@@ -153,16 +169,24 @@ export function toRuntimeValue(placeholder: Placeholder): unknown {
         culture: null,
       }));
     case 'blocks': {
-      const key = (i: number) => `00000000-0000-0000-0000-${String(i + 1).padStart(12, '0')}`;
+      const key = (i: number, group = '0000') => `00000000-0000-0000-${group}-${String(i + 1).padStart(12, '0')}`;
+      // Library blocks are only in the layout, pointing at their element: they have no content of their own
+      const local = placeholder.value.flatMap((item, i) => (libraryNameOf(item) === undefined ? [{ item, i }] : []));
       return {
-        layout: { 'Umbraco.BlockList': placeholder.value.map((_, i) => ({ contentKey: key(i), settingsKey: null })) },
-        contentData: placeholder.value.map((item, i) => ({
+        layout: {
+          'Umbraco.BlockList': placeholder.value.map((item, i) =>
+            libraryNameOf(item) === undefined
+              ? { key: key(i, '0001'), contentKey: key(i), settingsKey: null }
+              : { key: key(i, '0001'), contentKey: key(i, '0002'), settingsKey: null, isExternalContent: true },
+          ),
+        },
+        contentData: local.map(({ item, i }) => ({
           key: key(i),
           contentTypeKey: '00000000-0000-0000-0000-000000000000',
           values: Object.entries(item).map(([alias, value]) => ({ alias, value, culture: null, segment: null })),
         })),
         settingsData: [],
-        expose: placeholder.value.map((_, i) => ({ contentKey: key(i), culture: null, segment: null })),
+        expose: local.map(({ i }) => ({ contentKey: key(i), culture: null })),
       };
     }
     case 'object':
@@ -200,8 +224,18 @@ export function fromRuntimeValue(value: unknown, kind: ValueKind): Placeholder {
         ),
       };
     case 'blocks': {
-      const contentData = (value as { contentData?: Array<{ values: Array<{ alias: string; value: unknown }> }> })?.contentData;
-      const items = contentData ? contentData.map((block) => Object.fromEntries(block.values.map((v) => [v.alias, v.value]))) : asArray(value);
+      const { layout, contentData } = (value ?? {}) as {
+        layout?: Record<string, unknown>;
+        contentData?: Array<{ key: string; values: Array<{ alias: string; value: unknown }> }>;
+      };
+      const content = new Map(contentData?.map((block) => [block.key, Object.fromEntries(block.values.map((v) => [v.alias, v.value]))]));
+      // The layout has every block in order, including library blocks, which aren't in contentData
+      const entries = Object.values(layout ?? {}).find(Array.isArray) as Array<{ contentKey?: string; isExternalContent?: boolean }> | undefined;
+      const items = !contentData
+        ? asArray(value)
+        : entries
+          ? entries.map((entry) => (entry.isExternalContent ? { [LIBRARY_KEY]: UNKNOWN_LIBRARY_NAME } : (content.get(entry.contentKey ?? '') ?? {})))
+          : [...content.values()];
       return {
         kind,
         value: items.map((item) =>
