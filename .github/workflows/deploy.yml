@@ -1,24 +1,56 @@
 name: Deploy to GitHub Pages
 
+# Builds and tests main (the latest Umbraco release) and every release/v* branch (other versions,
+# including pre-releases), and deploys them together: see scripts/assemble-site.mjs.
+
 on:
   push:
-    branches: [main]
+    branches: [main, 'release/v*']
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: read
   pages: write
   id-token: write
 
 concurrency:
-  group: pages
+  group: ${{ github.ref == 'refs/heads/main' && 'pages' || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
+  # A release branch's copy of this workflow may be out of date, so it hands over to main's
+  from-release-branch:
+    if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
+      - run: gh workflow run deploy.yml --repo "$GITHUB_REPOSITORY" --ref main
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  branches:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      branches: ${{ steps.list.outputs.branches }}
+    steps:
+      - id: list
+        run: |
+          branches=$(git ls-remote --heads "https://github.com/$GITHUB_REPOSITORY.git" \
+            | sed -n 's#.*refs/heads/\(release/v[0-9]*\)$#\1#p' | jq -R . | jq -sc '["main"] + .')
+          echo "branches=$branches" >> "$GITHUB_OUTPUT"
+          echo "Building $branches"
+
+  build:
+    needs: branches
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        branch: ${{ fromJSON(needs.branches.outputs.branches) }}
+    steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -27,12 +59,37 @@ jobs:
       - run: npm run build
       # Checks every example still renders what Umbraco does (uses the runner's installed Chrome)
       - run: npm test
+      - id: name
+        run: echo "name=build-${BRANCH//\//-}" >> "$GITHUB_OUTPUT"
+        env:
+          BRANCH: ${{ matrix.branch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.name.outputs.name }}
+          path: dist
+          retention-days: 1
+
+  assemble:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: build-*
+          path: builds
+      - run: node scripts/assemble-site.mjs site builds/build-main $(ls -d builds/build-release-* 2>/dev/null)
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: site
 
   deploy:
-    needs: build
+    needs: assemble
     runs-on: ubuntu-latest
     environment:
       name: github-pages

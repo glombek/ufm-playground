@@ -17,6 +17,7 @@ import './embed-dialog.js';
 import { setUfmLanguageData } from '../editors/ufm-language/data.js';
 import { track } from '../analytics.js';
 import { decodeState, encodeState, type PlaygroundState } from '../state.js';
+import { fixedVersionUrl, getDeployedVersions, inVersionFolder, latestVersionUrl, MAJOR, UMBRACO_VERSION, type DeployedVersion, type DeployedVersions } from '../versions.js';
 import { getCatalogue, getTerms, hasTerm, startUfm } from '../ufm/runtime.js';
 import { iconNames } from '../ufm/ui.js';
 import { EXAMPLES } from './examples.js';
@@ -53,8 +54,6 @@ type DebugTab = 'markup' | 'values' | 'analysis' | 'state';
 
 const SEVERITY_ICONS = { error: 'icon-alert', warning: 'icon-alert', info: 'icon-info' };
 
-declare const __UMBRACO_VERSION__: string;
-
 export class UfmPlaygroundAppElement extends LitElement {
   static override properties = {
     _template: { state: true },
@@ -66,7 +65,11 @@ export class UfmPlaygroundAppElement extends LitElement {
     _debugTab: { state: true },
     _copied: { state: true },
     _emptyBlank: { state: true },
+    _versions: { state: true },
   };
+
+  /** The Umbraco versions deployed, for switching between them. */
+  private _versions?: DeployedVersions;
 
   /** Whether the label renders blank when nothing's filled in. */
   private _emptyBlank = false;
@@ -95,6 +98,7 @@ export class UfmPlaygroundAppElement extends LitElement {
     if (shared) track('Open state', { from: shared.exact ? 'bookmarklet' : 'link' });
     this.#load(shared ?? EXAMPLES[0]);
     window.addEventListener('hashchange', this.#onHashChange);
+    void getDeployedVersions().then((versions) => (this._versions = versions));
   }
 
   override disconnectedCallback() {
@@ -328,15 +332,34 @@ export class UfmPlaygroundAppElement extends LitElement {
     if (this._showDebug) track('Debug panel');
   }
 
-  async #copyLink(unused = false) {
+  /** Copies a link to this playground, or the same thing in another folder (`url`). */
+  async #copyLink({ url = `${location.origin}${location.pathname}`, unused = false } = {}) {
     this.renderRoot.querySelector<HTMLElement>('#link-options')?.hidePopover();
-    await navigator.clipboard.writeText(`${location.origin}${location.pathname}#${encodeState(this.#state(unused))}`);
+    await navigator.clipboard.writeText(`${url}#${encodeState(this.#state(unused))}`);
     track('Copy link', { unused });
     this._copied = true;
     setTimeout(() => (this._copied = false), 2000);
   }
 
+  #onVersion(e: Event) {
+    const major = (e.target as HTMLElement & { value: string }).value;
+    if (!this._versions || major === MAJOR) return;
+    // The hash includes unused properties, so nothing's lost by switching
+    location.href = `${major === this._versions.latest ? latestVersionUrl() : fixedVersionUrl(major)}${location.hash}`;
+  }
+
   // ---- Rendering ----------------------------------------------------------------------------
+
+  #renderVersion() {
+    const deployed = this._versions;
+    if (!deployed || deployed.versions.length < 2) return html`<span class="version">Umbraco ${UMBRACO_VERSION}</span>`;
+    const name = (v: DeployedVersion) => `Umbraco ${v.version}${v.prerelease ? ' (preview)' : v.major === deployed.latest ? ' (latest)' : ''}`;
+    return html`<uui-select
+      class="version-select"
+      label="Umbraco version"
+      .options=${deployed.versions.map((v) => ({ name: name(v), value: v.major, selected: v.major === MAJOR }))}
+      @change=${this.#onVersion}></uui-select>`;
+  }
 
   override render() {
     return html`
@@ -344,22 +367,25 @@ export class UfmPlaygroundAppElement extends LitElement {
         <div class="title">
           <umb-icon name="icon-brackets"></umb-icon>
           <h1>UFM Playground</h1>
-          <span class="version">Umbraco ${__UMBRACO_VERSION__}</span>
+          ${this.#renderVersion()}
         </div>
         <div class="actions">
           <uui-button-group>
             <uui-button look="primary" color="default" label="Copy link" .state=${this._copied ? 'success' : undefined} @click=${() => this.#copyLink()}>
               <uui-icon name="icon-link"></uui-icon> Copy link
             </uui-button>
-            ${hasUnused(this._blocks)
-              ? html`<uui-button look="primary" color="default" compact label="More link options" popovertarget="link-options">
-                  <uui-symbol-expand open></uui-symbol-expand>
-                </uui-button>`
-              : nothing}
+            <uui-button look="primary" color="default" compact label="More link options" popovertarget="link-options">
+              <uui-symbol-expand open></uui-symbol-expand>
+            </uui-button>
           </uui-button-group>
           <uui-popover-container id="link-options" placement="bottom-end">
             <div class="popover">
-              <uui-button look="default" label="Copy link with unused properties" @click=${() => this.#copyLink(true)}></uui-button>
+              ${inVersionFolder
+                ? html`<uui-button look="default" label="Copy link to the latest version" @click=${() => this.#copyLink({ url: latestVersionUrl() })}></uui-button>`
+                : html`<uui-button look="default" label="Copy link fixed on Umbraco ${MAJOR}" @click=${() => this.#copyLink({ url: fixedVersionUrl() })}></uui-button>`}
+              ${hasUnused(this._blocks)
+                ? html`<uui-button look="default" label="Copy link with unused properties" @click=${() => this.#copyLink({ unused: true })}></uui-button>`
+                : nothing}
             </div>
           </uui-popover-container>
           <uui-button look="outline" color="default" label="Embed code" title="Show this on another page, like a blog post" @click=${() => this.renderRoot.querySelector('ufm-embed-dialog')?.open()}>
@@ -484,20 +510,20 @@ export class UfmPlaygroundAppElement extends LitElement {
     switch (this._mode) {
       case 'description':
         return html`<uui-box headline="Property description">
-          <ufm-preview .template=${this._template} mode="description" .exactValues=${true}></ufm-preview>
+          <ufm-preview-core .template=${this._template} mode="description" .exactValues=${true}></ufm-preview-core>
         </uui-box>`;
       case 'collection': {
         const rows = [...this._blocks.map((b, i) => this.#blockValues(b, i)), { $empty: true }];
         return html`
           <uui-box headline="Collection">
-            <ufm-preview
+            <ufm-preview-core
               .template=${this._template}
               .values=${rows}
               mode="collection"
               .exactValues=${true}
               @label-resolved=${(e: CustomEvent<{ index: number; text: string }>) => {
                 if (e.detail.index === rows.length - 1) this._emptyBlank = !e.detail.text.trim();
-              }}></ufm-preview>
+              }}></ufm-preview-core>
             ${this.#renderBlankWarning('cell')}
           </uui-box>
           <uui-box headline="Rows">${this.#renderBlockEditor('Page ${ $index + 1 }', 'row', 'icon-document')}</uui-box>
@@ -520,12 +546,12 @@ export class UfmPlaygroundAppElement extends LitElement {
     return html`<div class="empty-block">
       <h3>Nothing filled in</h3>
       <p class="hint">A new block, before an editor has entered anything: every property is unset. Make sure it still makes sense!</p>
-      <ufm-preview
+      <ufm-preview-core
         class="empty-preview"
         .template=${this._template}
         .values=${[empty]}
         .exactValues=${true}
-        @label-resolved=${(e: CustomEvent<{ text: string }>) => (this._emptyBlank = !e.detail.text.trim())}></ufm-preview>
+        @label-resolved=${(e: CustomEvent<{ text: string }>) => (this._emptyBlank = !e.detail.text.trim())}></ufm-preview-core>
       ${this.#renderBlankWarning('label')}
     </div>`;
   }
@@ -687,12 +713,18 @@ export class UfmPlaygroundAppElement extends LitElement {
       color: var(--uui-color-header-contrast);
       font-size: 0.9em;
     }
+    .version-select {
+      font-size: 0.9em;
+    }
     header .actions {
       display: flex;
       flex-wrap: wrap;
       gap: var(--uui-size-space-2);
     }
     .popover {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
       padding: var(--uui-size-space-2);
       border-radius: var(--uui-border-radius);
       background: var(--uui-color-surface);

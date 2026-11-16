@@ -1,6 +1,7 @@
 /**
- * `<ufm-preview>` renders a UFM template the way the backoffice would: as a block list label, a
- * collection column or a property description. Used by the playground, and embeddable elsewhere:
+ * `<ufm-preview-core>` renders a UFM template the way the backoffice would: as a block list label,
+ * a collection column or a property description. Used by the playground, and on other sites through
+ * `<ufm-preview>` (`src/embed.ts`), which takes the same attributes:
  *
  *   <ufm-preview template="Call to action: {umbContentName: page}" values='{"page": "Contact us"}'></ufm-preview>
  *
@@ -295,10 +296,10 @@ export class UfmPreviewElement extends LitElement {
   `;
 }
 
-if (!customElements.get('ufm-preview')) customElements.define('ufm-preview', UfmPreviewElement);
+if (!customElements.get('ufm-preview-core')) customElements.define('ufm-preview-core', UfmPreviewElement);
 
 declare global {
   interface HTMLElementTagNameMap {
-    'ufm-preview': UfmPreviewElement;
+    'ufm-preview-core': UfmPreviewElement;
   }
 }

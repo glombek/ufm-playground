@@ -63,6 +63,10 @@
       <li><code>show-template</code>: show the template above the preview.</li>
       <li><code>editable</code>: show the template, and let readers edit it, with the preview updating as they type.</li>
       <li><code>playground</code>: add an "Open in the UFM playground" link.</li>
+      <li>
+        <code>version</code>: the Umbraco major version to render with, e.g. <code>version="17"</code>, from the versions in the playground's version picker.
+        Without it, previews use the latest Umbraco release, so can change when there's a new one. All the previews on a page have to use the same version.
+      </li>
     </ul>
 
     <script type="module" src="/src/embed.ts"></script>

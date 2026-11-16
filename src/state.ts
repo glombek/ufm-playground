@@ -27,7 +27,8 @@ export function setPlaygroundBase(url: string) {
 }
 
 export function playgroundUrl(state: PlaygroundState) {
-  const base = playgroundBase ?? `${location.origin}/`;
+  // By default, the playground in the same folder as the page (e.g. /v17/)
+  const base = playgroundBase ?? new URL('./', location.href).href;
   return `${base}#${encodeState(state)}`;
 }
 

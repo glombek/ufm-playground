@@ -35,7 +35,7 @@ The playground's editors (`src/editors/`) are mostly the backoffice's own:
 | Picked items, links | Lookalikes built from `<uui-ref-node>` (the real pickers need the Management API) |
 | Blocks | `<ufm-block-list-editor>`, styled like the block list's inline editing mode |
 
-They're big (Monaco especially), so they load after the page has rendered, and aren't part of `embed.js`.
+They're big (Monaco especially), so they load after the page has rendered, and aren't part of `embed-core.js`.
 
 ### The `ufm` Monaco language
 
@@ -59,11 +59,28 @@ npm run dev
 
 Bump `@umbraco-cms/backoffice` in `package.json`, then `npm install && npm run build && npm test`. If an example's output changes, check it against a real Umbraco site before updating `tests/examples.test.mjs`.
 
+## Umbraco versions
+
+Each Umbraco major version has its own playground, built from its own branch:
+
+| Branch | Umbraco | Served at |
+| --- | --- | --- |
+| `main` | The latest release | `/`, and its own folder (e.g. `/v18/`) |
+| `release/v17`, … | Older majors | `/v17/`, … |
+| `release/v19`, … | Pre-releases (RCs) | `/v19/`, … only, until released |
+
+- Upgrade a version (e.g. a minor release that changes UFM) on its branch, like any other change. Pushing it redeploys everything.
+- For a new major: cut `release/vNN` from `main` for the current version, then bump `main`. Pre-releases live on their own `release/vNN` branch until they're released, then move to `main`.
+- Each branch's tests have their own expected outputs, checked against that version of Umbraco.
+- Fixes and features go on `main`, and are only cherry-picked into other branches when they're wanted there.
+
+There's only one `embed.js`, embed page and bookmarklet, at the root, from `main`. `<ufm-preview>` loads the renderer (`embed-core.js`) from the folder for its `version` attribute, or the latest without one. The playground's header lists the versions (`/versions.json`), and switching keeps what's in the playground.
+
 ## Deploying to GitHub Pages
 
-Push to `main` and the workflow in `.github/workflows/deploy.yml` builds, tests and deploys the site. In the repository's settings, under **Pages**, set the source to **GitHub Actions**.
+Push to `main` or a `release/v*` branch and the workflow in `.github/workflows/deploy.yml` builds and tests every version's branch, puts them together (`scripts/assemble-site.mjs`) and deploys the site. Any branch's tests failing stops the deploy. In the repository's settings, under **Pages**, set the source to **GitHub Actions**.
 
-It's served from the root of its own domain, [ufm-playground.joe.gl](https://ufm-playground.joe.gl/) (`public/CNAME`), so pages use root URLs (`/bookmarklet/`, `/favicon.svg`). Set the same custom domain in the repository's Pages settings. URLs inside scripts are relative to the script instead (see `renderBuiltUrl` in `vite.config.ts`), as `embed.js` runs on other sites.
+It's served from the root of its own domain, [ufm-playground.joe.gl](https://ufm-playground.joe.gl/) (`public/CNAME`). Set the same custom domain in the repository's Pages settings. As each build is served from more than one folder, built pages use relative URLs (Vite's `base: './'`), and the pages only at the root (`/bookmarklet/`, `/embed.html`) are linked to with root URLs. URLs inside scripts are relative to the script (see `renderBuiltUrl` in `vite.config.ts`), as `embed-core.js` runs on other sites.
 
 ## Embedding previews
 
@@ -73,7 +90,7 @@ It's served from the root of its own domain, [ufm-playground.joe.gl](https://ufm
 <ufm-preview template="Call to Action: {umbContentName: page}" values='{"page": "Contact us"}'></ufm-preview>
 ```
 
-See `embed.html` (or `/embed.html` on the deployed site) for all the options. The playground's **Embed code** button gives you the element for whatever's in the playground.
+Add `version="17"` to use a particular Umbraco version, rather than the latest. See `embed.html` (or `/embed.html` on the deployed site) for all the options. The playground's **Embed code** button gives you the element for whatever's in the playground.
 
 ## The bookmarklet
 

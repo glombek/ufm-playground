@@ -5,6 +5,7 @@
 import { css, html, LitElement, nothing } from '@umbraco-cms/backoffice/external/lit';
 import { track } from '../analytics.js';
 import type { PlaygroundState } from '../state.js';
+import { inVersionFolder, MAJOR } from '../versions.js';
 import '../components/ufm-preview.js';
 
 interface EmbedOptions {
@@ -14,6 +15,8 @@ interface EmbedOptions {
   icon: string;
   script: boolean;
   unused: boolean;
+  /** Keep to this Umbraco version, rather than following the latest. */
+  fixedVersion: boolean;
 }
 
 const DEFAULT_ICON = 'icon-document';
@@ -47,12 +50,12 @@ export class UfmEmbedDialogElement extends LitElement {
   /** What's in the playground, with values the template doesn't use, if there are any. */
   stateWithUnused?: PlaygroundState;
 
-  private _options: EmbedOptions = { showTemplate: true, editable: true, playground: true, icon: DEFAULT_ICON, script: true, unused: false };
+  private _options: EmbedOptions = { showTemplate: true, editable: true, playground: true, icon: DEFAULT_ICON, script: true, unused: false, fixedVersion: inVersionFolder };
+  private _copied = false;
 
   get #state() {
     return (this._options.unused && this.stateWithUnused) || this.state;
   }
-  private _copied = false;
 
   open() {
     this.shadowRoot?.querySelector('dialog')?.showModal();
@@ -69,9 +72,10 @@ export class UfmEmbedDialogElement extends LitElement {
 
   get #code() {
     if (!this.#state) return '';
-    const { showTemplate, editable, playground, icon, script } = this._options;
+    const { showTemplate, editable, playground, icon, script, fixedVersion } = this._options;
     const mode = this.#state.mode ?? 'block';
     const attributes = [
+      fixedVersion ? `version="${MAJOR}"` : '',
       `template="${attributeValue(this.#state.template, '"')}"`,
       `values='${attributeValue(JSON.stringify(this.#state.values ?? {}), "'")}'`,
       mode === 'block' ? '' : `mode="${mode}"`,
@@ -92,7 +96,7 @@ export class UfmEmbedDialogElement extends LitElement {
   }
 
   override render() {
-    const { showTemplate, editable, playground, icon, script, unused } = this._options;
+    const { showTemplate, editable, playground, icon, script, unused, fixedVersion } = this._options;
     const mode = this.state?.mode ?? 'block';
     return html`<dialog @click=${(e: Event) => e.target === e.currentTarget && this.#close()}>
       <uui-dialog-layout headline="Embed code">
@@ -102,6 +106,10 @@ export class UfmEmbedDialogElement extends LitElement {
           <uui-toggle label="Show the template" .checked=${showTemplate || editable} ?disabled=${editable} @change=${(e: Event) => this.#set('showTemplate', (e.target as HTMLInputElement).checked)}></uui-toggle>
           <uui-toggle label="Let readers edit the template" .checked=${editable} @change=${(e: Event) => this.#set('editable', (e.target as HTMLInputElement).checked)}></uui-toggle>
           <uui-toggle label='Add an "Open in the UFM playground" link' .checked=${playground} @change=${(e: Event) => this.#set('playground', (e.target as HTMLInputElement).checked)}></uui-toggle>
+          <uui-toggle
+            label="Always use Umbraco ${MAJOR}, rather than the latest version"
+            .checked=${fixedVersion}
+            @change=${(e: Event) => this.#set('fixedVersion', (e.target as HTMLInputElement).checked)}></uui-toggle>
           <uui-toggle label="Include the script (once per page)" .checked=${script} @change=${(e: Event) => this.#set('script', (e.target as HTMLInputElement).checked)}></uui-toggle>
           ${this.stateWithUnused
             ? html`<uui-toggle
@@ -121,14 +129,14 @@ export class UfmEmbedDialogElement extends LitElement {
 
         <h3>Preview</h3>
         ${this.#state
-          ? html`<ufm-preview
+          ? html`<ufm-preview-core
               .template=${this.#state.template}
               .values=${this.#state.values}
               .mode=${mode}
               .icon=${icon || DEFAULT_ICON}
               .showTemplate=${showTemplate}
               .editable=${editable}
-              .playground=${playground}></ufm-preview>`
+              .playground=${playground}></ufm-preview-core>`
           : nothing}
 
         <h3>Code</h3>

@@ -53,13 +53,13 @@ const readPreview = () =>
     };
     const text = (n) => deep(n).replace(/\s+/g, ' ').trim();
     const app = document.querySelector('ufm-playground-app').shadowRoot;
-    // Block labels are rendered by the block list editor; collections and descriptions by <ufm-preview>
-    const preview = app.querySelector('ufm-preview[mode="collection"], ufm-preview[mode="description"]')?.shadowRoot;
+    // Block labels are rendered by the block list editor; collections and descriptions by <ufm-preview-core>
+    const preview = app.querySelector('ufm-preview-core[mode="collection"], ufm-preview-core[mode="description"]')?.shadowRoot;
     const blocks = app.querySelector('ufm-block-list-editor')?.shadowRoot;
     const rows = preview
       ? [...preview.querySelectorAll('tbody tr:not(.empty), .property')]
       : [...(blocks?.querySelectorAll('.block > .header umb-ufm-render') ?? [])];
-    const empty = app.querySelector('ufm-preview.empty-preview')?.shadowRoot?.querySelector('umb-ufm-render');
+    const empty = app.querySelector('ufm-preview-core.empty-preview')?.shadowRoot?.querySelector('umb-ufm-render');
     return { rows: rows.map(text), empty: empty ? text(empty) : undefined, blankWarning: !!app.querySelector('.blank-warning') };
   });
 
@@ -127,23 +127,51 @@ const blankOk = blank.empty === '' && blank.blankWarning;
 console.log(`${blankOk ? '✓' : '✗'} Blank label warning${blankOk ? '' : ` ${JSON.stringify(blank)}`}`);
 if (!blankOk) failures++;
 
-// embed.js from another origin
-const blog = createServer((_, res) => {
+// embed.js from another origin. <ufm-preview> loads the version's renderer, <ufm-preview-core>.
+const { version: umbracoVersion } = await (await fetch(`${base}umbraco-version.json`)).json();
+const major = umbracoVersion.split('.')[0];
+const blogPages = {
+  '/': `<ufm-preview template='{=heading} <uui-tag color="positive">New</uui-tag>' values='{"heading":"Embedded"}' playground></ufm-preview>`,
+  // A version that isn't deployed doesn't stop the page using one that is
+  '/versions': `<ufm-preview version="9" template="Nine"></ufm-preview><ufm-preview version="v${major}" template="{=heading}" values='{"heading":"Versioned"}'></ufm-preview>`,
+};
+const blog = createServer((req, res) => {
   res.setHeader('content-type', 'text/html');
-  res.end(`<!doctype html><ufm-preview template='{=heading} <uui-tag color="positive">New</uui-tag>' values='{"heading":"Embedded"}' playground></ufm-preview>
-    <script type="module" src="${base}embed.js"></script>`);
+  res.end(`<!doctype html>${blogPages[req.url] ?? ''}<script type="module" src="${base}embed.js"></script>`);
 }).listen(4175);
 current = 'embed';
+const readEmbed = (index) =>
+  page.evaluate((index) => {
+    const deep = (n) => (n.nodeType === Node.TEXT_NODE ? n.textContent : n.tagName === 'STYLE' ? '' : [...(n.shadowRoot ?? n).childNodes].map(deep).join(''));
+    const outer = document.querySelectorAll('ufm-preview')[index].shadowRoot;
+    const root = outer.querySelector('ufm-preview-core')?.shadowRoot;
+    const rendered = root?.querySelector('umb-ufm-render')?.shadowRoot;
+    const tag = rendered?.querySelector('uui-tag');
+    return {
+      text: rendered && deep(rendered).replace(/\s+/g, ' ').trim(),
+      error: outer.querySelector('.error')?.textContent,
+      tagColour: tag && getComputedStyle(tag).backgroundColor,
+      link: root?.querySelector('a.playground')?.href,
+    };
+  }, index);
 await page.goto('http://localhost:4175/');
 await page.waitForTimeout(2000);
-const embedded = await page.evaluate(() => {
-  const root = document.querySelector('ufm-preview').shadowRoot;
-  const tag = root.querySelector('umb-ufm-render').shadowRoot.querySelector('uui-tag');
-  return { text: root.querySelector('.block')?.textContent.trim(), tagColour: tag && getComputedStyle(tag).backgroundColor, link: root.querySelector('a.playground')?.href };
-});
-const embedOk = embedded.tagColour === 'rgb(11, 129, 82)' && embedded.link?.startsWith(base);
-console.log(`${embedOk ? '✓' : '✗'} embed.js from another origin${embedOk ? '' : ` ${JSON.stringify(embedded)}`}`);
+const embedded = await readEmbed(0);
+// Attributes changed later are passed on to the renderer
+await page.evaluate(() => document.querySelector('ufm-preview').setAttribute('values', '{"heading":"Changed"}'));
+await page.waitForTimeout(500);
+const changed = await readEmbed(0);
+const embedOk = embedded.tagColour === 'rgb(11, 129, 82)' && embedded.link?.startsWith(base) && changed.text?.startsWith('Changed');
+console.log(`${embedOk ? '✓' : '✗'} embed.js from another origin${embedOk ? '' : ` ${JSON.stringify({ embedded, changed })}`}`);
 if (!embedOk) failures++;
+
+current = 'embed versions';
+await page.goto('http://localhost:4175/versions');
+await page.waitForTimeout(2000);
+const [missing, versioned] = [await readEmbed(0), await readEmbed(1)];
+const versionsOk = missing.error === "There's no Umbraco 9 version of the UFM playground." && versioned.text === 'Versioned';
+console.log(`${versionsOk ? '✓' : '✗'} embed.js version attribute${versionsOk ? '' : ` ${JSON.stringify({ missing, versioned })}`}`);
+if (!versionsOk) failures++;
 
 // Umbraco's <umb-ufm-js-expression> re-evaluates as it's removed, after it's lost the UFM context
 // (and so its filters), so an expression using a filter pipe throws "… is not a function" when a
